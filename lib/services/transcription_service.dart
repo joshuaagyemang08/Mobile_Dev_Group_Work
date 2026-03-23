@@ -27,6 +27,38 @@ class TranscriptionException implements Exception {
   String toString() => 'TranscriptionException: $message';
 }
 
+/// Represents a single speaker turn in the transcript.
+class SpeakerTurn {
+  final String speaker; // 'Lecturer' or 'Student'
+  final String text;
+  const SpeakerTurn({required this.speaker, required this.text});
+}
+
+/// Parses AssemblyAI utterances and labels the most-talking speaker as Lecturer.
+List<SpeakerTurn> parseSpeakers(List<dynamic> utterances) {
+  // Count total words spoken by each speaker
+  final wordCount = <String, int>{};
+  for (final u in utterances) {
+    final speaker = u['speaker'] as String? ?? 'Unknown';
+    final text = u['text'] as String? ?? '';
+    wordCount[speaker] = (wordCount[speaker] ?? 0) + text.split(' ').length;
+  }
+
+  // The speaker with the most words is the lecturer
+  final lecturer = wordCount.entries
+      .reduce((a, b) => a.value >= b.value ? a : b)
+      .key;
+
+  return utterances.map((u) {
+    final speaker = u['speaker'] as String? ?? 'Unknown';
+    final text = u['text'] as String? ?? '';
+    return SpeakerTurn(
+      speaker: speaker == lecturer ? 'Lecturer' : 'Student',
+      text: text,
+    );
+  }).toList();
+}
+
 class TranscriptionService {
   /// Uploads a local audio file to backend and returns transcript text.
   Future<String> transcribeAudio(
