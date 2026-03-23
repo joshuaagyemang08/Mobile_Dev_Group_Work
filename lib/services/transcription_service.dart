@@ -42,14 +42,33 @@ class TranscriptionService {
     onTranscriptionStatus?.call('uploading');
     onProgress?.call(0.1);
 
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse(AppConstants.transcribeEndpoint),
-    );
-    request.files.add(await http.MultipartFile.fromPath('audio', filePath));
+    // Retry upload up to 3 times on failure (e.g. bad internet connection)
+    const maxRetries = 3;
+    int attempt = 0;
+    late http.StreamedResponse streamed;
+    late String responseBody;
 
-    final streamed = await request.send();
-    final responseBody = await streamed.stream.bytesToString();
+    while (attempt < maxRetries) {
+      try {
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse(AppConstants.transcribeEndpoint),
+        );
+        request.files.add(await http.MultipartFile.fromPath('audio', filePath));
+
+        streamed = await request.send();
+        responseBody = await streamed.stream.bytesToString();
+        break; // success — exit the retry loop
+      } catch (e) {
+        attempt++;
+        if (attempt >= maxRetries) {
+          throw TranscriptionException(
+              'Upload failed after $maxRetries attempts: $e');
+        }
+        onTranscriptionStatus?.call('retrying (attempt $attempt)');
+        await Future.delayed(const Duration(seconds: 2));
+      }
+    }
 
     if (streamed.statusCode != 200) {
       throw TranscriptionException(
