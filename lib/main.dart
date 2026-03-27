@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'providers/lecture_provider.dart';
-import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,7 +22,7 @@ class ScribApp extends StatelessWidget {
         title: 'Scrib',
         debugShowCheckedModeBanner: false,
         theme: ScribTheme.dark,
-        home: const HomeScreen(),
+        home: const SplashScreen(),
       ),
     );
   }
