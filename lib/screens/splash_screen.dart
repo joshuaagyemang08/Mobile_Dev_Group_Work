@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
+import 'auth_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -93,12 +94,17 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       final onboardingDone = prefs.getBool('onboarding_complete') ?? false;
+      final loggedIn = prefs.getBool('is_logged_in') ?? false;
       if (!mounted) return;
+      final Widget next = !onboardingDone
+          ? const OnboardingScreen()
+          : loggedIn
+              ? const HomeScreen()
+              : const AuthScreen();
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           transitionDuration: const Duration(milliseconds: 600),
-          pageBuilder: (_, __, ___) =>
-              onboardingDone ? const HomeScreen() : const OnboardingScreen(),
+          pageBuilder: (_, __, ___) => next,
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
         ),
