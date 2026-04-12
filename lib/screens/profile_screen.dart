@@ -4,10 +4,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import '../core/theme.dart';
+import '../providers/theme_provider.dart';
+import 'auth_screen.dart';
+import 'notification_settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -59,28 +63,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (pickedFile != null) {
         String finalPath = pickedFile.path;
-
-        // On Mobile, we copy to permanent storage.
-        // On Web, we use the blob URL (note: blob URLs don't persist after reload on Web)
         if (!kIsWeb) {
           final appDir = await getApplicationDocumentsDirectory();
           final fileName = path.basename(pickedFile.path);
           final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
           finalPath = savedImage.path;
         }
-
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_profile_image', finalPath);
-        
-        setState(() {
-          _imagePath = finalPath;
-        });
+        setState(() => _imagePath = finalPath);
       }
     } catch (e) {
-      debugPrint('Error picking image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to pick image. Please try again.')),
+          const SnackBar(content: Text('Failed to pick image.')),
         );
       }
     }
@@ -88,13 +84,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_name', _nameController.text.trim());
     await prefs.setString('user_email', _emailController.text.trim());
     setState(() => _isLoading = false);
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully!')),
@@ -102,62 +96,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', false);
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
     return Scaffold(
-      backgroundColor: ScribTheme.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('My Profile'),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
-              // Profile Picture
-              GestureDetector(
-                onTap: _pickImage,
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: ScribTheme.surface,
-                        border: Border.all(color: ScribTheme.primary.withOpacity(0.5), width: 2),
-                      ),
-                      child: ClipOval(
-                        child: _buildProfileImage(),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: ScribTheme.primary,
+              // --- Header / Avatar Section ---
+              Center(
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 110,
+                        height: 110,
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
+                          color: Theme.of(context).cardTheme.color,
+                          border: Border.all(color: ScribTheme.primary.withOpacity(0.4), width: 3),
                         ),
-                        child: const Icon(Icons.camera_alt,
-                            color: Colors.white, size: 20),
+                        child: ClipOval(child: _buildProfileImage()),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(color: ScribTheme.primary, shape: BoxShape.circle),
+                          child: const Icon(Icons.edit, color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 32),
+
+              // --- Personal Information ---
+              _buildSectionTitle('Personal Information'),
+              const SizedBox(height: 12),
               _buildTextField(
                 controller: _nameController,
                 label: 'Full Name',
                 icon: Icons.person_outline,
                 validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               _buildTextField(
                 controller: _emailController,
                 label: 'Email Address',
@@ -165,21 +173,90 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) => v == null || !v.contains('@') ? 'Enter a valid email' : null,
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 54,
+                height: 50,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _saveProfile,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: ScribTheme.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 40),
+
+              // --- App Settings Section ---
+              _buildSectionTitle('App Settings'),
+              const SizedBox(height: 8),
+              _buildClickableTile(
+                icon: Icons.notifications_none_rounded,
+                title: 'Notifications',
+                subtitle: 'Manage alerts and reminders',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()),
+                  );
+                },
+              ),
+              _buildClickableTile(
+                icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                title: 'Theme',
+                subtitle: isDark ? 'Dark mode enabled' : 'Light mode enabled',
+                trailing: Switch(
+                  value: isDark,
+                  activeColor: ScribTheme.primary,
+                  onChanged: (val) => themeProvider.toggleTheme(),
+                ),
+                onTap: () => themeProvider.toggleTheme(),
+              ),
+              _buildClickableTile(
+                icon: Icons.language_rounded,
+                title: 'App Language',
+                subtitle: 'English (US)',
+                onTap: () {},
+              ),
+
+              const SizedBox(height: 32),
+
+              // --- Support & More ---
+              _buildSectionTitle('Support & More'),
+              const SizedBox(height: 8),
+              _buildClickableTile(
+                icon: Icons.help_outline_rounded,
+                title: 'Help Center',
+                onTap: () {},
+              ),
+              _buildClickableTile(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                onTap: () {},
+              ),
+              _buildClickableTile(
+                icon: Icons.info_outline_rounded,
+                title: 'About Scrib',
+                subtitle: 'Version 1.0.0',
+                onTap: () {},
+              ),
+
+              const SizedBox(height: 32),
+
+              // --- Danger Zone ---
+              _buildSectionTitle('Account Actions'),
+              const SizedBox(height: 8),
+              _buildClickableTile(
+                icon: Icons.logout_rounded,
+                title: 'Logout',
+                titleColor: ScribTheme.error,
+                iconColor: ScribTheme.error,
+                onTap: _logout,
+              ),
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -187,27 +264,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+        color: Theme.of(context).brightness == Brightness.dark 
+            ? ScribTheme.textSecondaryDark 
+            : ScribTheme.textSecondaryLight,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+
+  Widget _buildClickableTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback onTap,
+    Color? titleColor,
+    Color? iconColor,
+    Widget? trailing,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(icon, color: iconColor ?? ScribTheme.primary, size: 22),
+        title: Text(title, style: TextStyle(color: titleColor ?? Theme.of(context).colorScheme.onSurface, fontSize: 15, fontWeight: FontWeight.w500)),
+        subtitle: subtitle != null ? Text(subtitle, style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, fontSize: 12)) : null,
+        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: ScribTheme.textSecondaryDark, size: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
+    );
+  }
+
   Widget _buildProfileImage() {
     if (_imagePath == null || _imagePath!.isEmpty) {
-      return const Icon(Icons.person, size: 60, color: ScribTheme.textSecondary);
+      return const Icon(Icons.person, size: 50, color: ScribTheme.textSecondaryDark);
     }
-
     if (kIsWeb) {
-      return Image.network(
-        _imagePath!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 60, color: ScribTheme.textSecondary),
-      );
+      return Image.network(_imagePath!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 50, color: ScribTheme.textSecondaryDark));
     } else {
       final file = File(_imagePath!);
-      if (!file.existsSync()) {
-        return const Icon(Icons.person, size: 60, color: ScribTheme.textSecondary);
-      }
-      return Image.file(
-        file,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 60, color: ScribTheme.textSecondary),
-      );
+      if (!file.existsSync()) return const Icon(Icons.person, size: 50, color: ScribTheme.textSecondaryDark);
+      return Image.file(file, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 50, color: ScribTheme.textSecondaryDark));
     }
   }
 
@@ -218,25 +324,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ScribTheme.onSurface)),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          validator: validator,
-          style: const TextStyle(color: ScribTheme.onSurface),
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: ScribTheme.textSecondary),
-            filled: true,
-            fillColor: ScribTheme.surface,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: ScribTheme.primary)),
-          ),
-        ),
-      ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      validator: validator,
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, fontSize: 14),
+        prefixIcon: Icon(icon, color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, size: 20),
+        filled: true,
+        fillColor: Theme.of(context).cardTheme.color,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: ScribTheme.primary, width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+      ),
     );
   }
 }

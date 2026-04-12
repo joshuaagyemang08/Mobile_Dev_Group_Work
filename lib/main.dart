@@ -4,11 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'providers/lecture_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ScribApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LectureProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: const ScribApp(),
+    ),
+  );
 }
 
 class ScribApp extends StatelessWidget {
@@ -16,14 +25,17 @@ class ScribApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => LectureProvider(),
-      child: MaterialApp(
-        title: 'Scrib',
-        debugShowCheckedModeBanner: false,
-        theme: ScribTheme.dark,
-        home: const SplashScreen(),
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, _) {
+        return MaterialApp(
+          title: 'Scrib',
+          debugShowCheckedModeBanner: false,
+          theme: ScribTheme.light,
+          darkTheme: ScribTheme.dark,
+          themeMode: themeProvider.themeMode,
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }
