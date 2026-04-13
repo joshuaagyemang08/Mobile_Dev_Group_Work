@@ -14,6 +14,7 @@ import '../providers/language_provider.dart';
 import 'auth_screen.dart';
 import 'notification_settings_screen.dart';
 import 'language_selection_screen.dart';
+import 'about_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -248,7 +249,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildClickableTile(
                 icon: Icons.info_outline_rounded,
                 title: languageProvider.translate('about'),
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AboutScreen()),
+                  );
+                },
               ),
 
               const SizedBox(height: 32),
