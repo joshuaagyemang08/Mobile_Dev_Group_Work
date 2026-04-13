@@ -9,7 +9,7 @@ class SupabaseConfig {
   /// Web OAuth Client ID from Google Cloud Console.
   /// Authentication > Providers > Google in your Supabase dashboard also needs this.
   static const String googleWebClientId =
-      'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+      '832136967573-b7d99dt56a0ftv55lbmc9s0c8v5s42bl.apps.googleusercontent.com';
 
   /// Deep-link scheme used for email confirmation & OAuth callbacks.
   static const String redirectScheme = 'com.example.scrib';
