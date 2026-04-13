@@ -10,6 +10,7 @@ import '../providers/lecture_provider.dart';
 import 'recording_screen.dart';
 import 'notes_screen.dart';
 import 'processing_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -268,32 +269,38 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          // Avatar
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [ScribTheme.primary, Color(0xFF7B6FF0)],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: ScribTheme.primary.withOpacity(0.3),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                ),
-              ],
+          // Avatar — taps to open profile
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
             ),
-            child: Center(
-              child: Text(
-                userName.isNotEmpty ? userName[0].toUpperCase() : 'S',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [ScribTheme.primary, Color(0xFF7B6FF0)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: ScribTheme.primary.withOpacity(0.3),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  userName.isNotEmpty ? userName[0].toUpperCase() : 'S',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
                 ),
               ),
             ),
