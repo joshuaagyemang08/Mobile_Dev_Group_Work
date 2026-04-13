@@ -10,8 +10,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import '../core/theme.dart';
 import '../providers/theme_provider.dart';
+import '../providers/language_provider.dart';
 import 'auth_screen.dart';
 import 'notification_settings_screen.dart';
+import 'language_selection_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -110,12 +112,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final languageProvider = Provider.of<LanguageProvider>(context);
     final isDark = themeProvider.isDarkMode;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('My Profile'),
+        title: Text(languageProvider.translate('profile')),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -157,18 +160,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 32),
 
               // --- Personal Information ---
-              _buildSectionTitle('Personal Information'),
+              _buildSectionTitle(languageProvider.translate('personal_info')),
               const SizedBox(height: 12),
               _buildTextField(
                 controller: _nameController,
-                label: 'Full Name',
+                label: languageProvider.translate('full_name'),
                 icon: Icons.person_outline,
                 validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
               ),
               const SizedBox(height: 16),
               _buildTextField(
                 controller: _emailController,
-                label: 'Email Address',
+                label: languageProvider.translate('email'),
                 icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) => v == null || !v.contains('@') ? 'Enter a valid email' : null,
@@ -185,18 +188,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: _isLoading
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      : Text(languageProvider.translate('save_changes'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 40),
 
               // --- App Settings Section ---
-              _buildSectionTitle('App Settings'),
+              _buildSectionTitle(languageProvider.translate('app_settings')),
               const SizedBox(height: 8),
               _buildClickableTile(
                 icon: Icons.notifications_none_rounded,
-                title: 'Notifications',
-                subtitle: 'Manage alerts and reminders',
+                title: languageProvider.translate('notifications'),
+                subtitle: 'Manage alerts',
                 onTap: () {
                   Navigator.push(
                     context,
@@ -206,8 +209,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               _buildClickableTile(
                 icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-                title: 'Theme',
-                subtitle: isDark ? 'Dark mode enabled' : 'Light mode enabled',
+                title: languageProvider.translate('theme'),
+                subtitle: isDark ? 'Dark mode' : 'Light mode',
                 trailing: Switch(
                   value: isDark,
                   activeColor: ScribTheme.primary,
@@ -217,41 +220,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               _buildClickableTile(
                 icon: Icons.language_rounded,
-                title: 'App Language',
-                subtitle: 'English (US)',
-                onTap: () {},
+                title: languageProvider.translate('language'),
+                subtitle: _getLanguageName(languageProvider.locale.languageCode, languageProvider),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LanguageSelectionScreen()),
+                  );
+                },
               ),
 
               const SizedBox(height: 32),
 
               // --- Support & More ---
-              _buildSectionTitle('Support & More'),
+              _buildSectionTitle(languageProvider.translate('support')),
               const SizedBox(height: 8),
               _buildClickableTile(
                 icon: Icons.help_outline_rounded,
-                title: 'Help Center',
+                title: languageProvider.translate('help'),
                 onTap: () {},
               ),
               _buildClickableTile(
                 icon: Icons.privacy_tip_outlined,
-                title: 'Privacy Policy',
+                title: languageProvider.translate('privacy'),
                 onTap: () {},
               ),
               _buildClickableTile(
                 icon: Icons.info_outline_rounded,
-                title: 'About Scrib',
-                subtitle: 'Version 1.0.0',
+                title: languageProvider.translate('about'),
                 onTap: () {},
               ),
 
               const SizedBox(height: 32),
 
               // --- Danger Zone ---
-              _buildSectionTitle('Account Actions'),
+              _buildSectionTitle('Account'),
               const SizedBox(height: 8),
               _buildClickableTile(
                 icon: Icons.logout_rounded,
-                title: 'Logout',
+                title: languageProvider.translate('logout'),
                 titleColor: ScribTheme.error,
                 iconColor: ScribTheme.error,
                 onTap: _logout,
@@ -262,6 +269,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  String _getLanguageName(String code, LanguageProvider provider) {
+    switch (code) {
+      case 'fr': return provider.translate('french');
+      case 'es': return provider.translate('spanish');
+      case 'de': return provider.translate('german');
+      case 'zh': return provider.translate('chinese');
+      default: return provider.translate('english');
+    }
   }
 
   Widget _buildSectionTitle(String title) {
