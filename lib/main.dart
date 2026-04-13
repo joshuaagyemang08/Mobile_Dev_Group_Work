@@ -2,14 +2,23 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme.dart';
 import 'providers/lecture_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/language_provider.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize date formatting for all supported locales
+  await initializeDateFormatting('en', null);
+  await initializeDateFormatting('fr', null);
+  await initializeDateFormatting('es', null);
+  await initializeDateFormatting('de', null);
+  await initializeDateFormatting('zh', null);
+
   runApp(
     MultiProvider(
       providers: [

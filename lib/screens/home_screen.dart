@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../models/lecture.dart';
 import '../providers/lecture_provider.dart';
+import '../providers/language_provider.dart';
 import 'recording_screen.dart';
 import 'notes_screen.dart';
 import 'profile_screen.dart';
@@ -54,11 +55,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String get _greeting {
+  String _getGreeting(LanguageProvider lp) {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return lp.translate('good_morning');
+    if (hour < 17) return lp.translate('good_afternoon');
+    return lp.translate('good_evening');
   }
 
   List<Lecture> _filtered(List<Lecture> lectures) {
@@ -83,8 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lp = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
-      backgroundColor: ScribTheme.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Consumer<LectureProvider>(
         builder: (context, provider, _) {
           final lectures = provider.lectures;
@@ -98,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 expandedHeight: 160,
                 floating: true,
                 pinned: true,
-                backgroundColor: ScribTheme.background,
+                backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
                 elevation: 0,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Padding(
@@ -114,20 +117,22 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 Text(
                                   _userName.isNotEmpty
-                                      ? '$_greeting, $_userName! 👋'
-                                      : '$_greeting! 👋',
-                                  style: const TextStyle(
+                                      ? '${_getGreeting(lp)}, $_userName! 👋'
+                                      : '${_getGreeting(lp)}! 👋',
+                                  style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
-                                    color: ScribTheme.onSurface,
+                                    color: Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  DateFormat('EEEE, MMMM d').format(DateTime.now()),
-                                  style: const TextStyle(
+                                  DateFormat('EEEE, MMMM d', lp.locale.languageCode).format(DateTime.now()),
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: ScribTheme.textSecondary,
+                                    color: Theme.of(context).brightness == Brightness.dark 
+                                        ? ScribTheme.textSecondaryDark 
+                                        : ScribTheme.textSecondaryLight,
                                   ),
                                 ),
                               ],
@@ -147,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 height: 42,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: ScribTheme.surface,
+                                  color: Theme.of(context).cardTheme.color,
                                   border: Border.all(
                                     color: ScribTheme.primary.withOpacity(0.3),
                                     width: 1.5,
@@ -170,6 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: _SearchBar(
                       controller: _searchController,
+                      hintText: lp.translate('search_hint'),
                       onChanged: (q) => setState(() => _searchQuery = q),
                     ),
                   ),
@@ -179,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // ── Stats ────────────────────────────────────────────────────
               if (lectures.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _StatsRow(lectures: lectures),
+                  child: _StatsRow(lectures: lectures, lp: lp),
                 ),
 
               // ── Subject filter chips ──────────────────────────────────────
@@ -203,21 +209,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text(
                         _searchQuery.isNotEmpty || _selectedSubject != null
-                            ? '${filtered.length} result${filtered.length == 1 ? '' : 's'}'
-                            : 'Your Lectures',
-                        style: const TextStyle(
+                            ? '${filtered.length} ${filtered.length == 1 ? lp.translate('result') : lp.translate('results')}'
+                            : lp.translate('your_lectures'),
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: ScribTheme.onSurface,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       if (_selectedSubject != null)
                         TextButton(
                           onPressed: () =>
                               setState(() => _selectedSubject = null),
-                          child: const Text(
-                            'Clear filter',
-                            style: TextStyle(
+                          child: Text(
+                            lp.translate('clear_filter'),
+                            style: const TextStyle(
                                 color: ScribTheme.primary, fontSize: 13),
                           ),
                         ),
@@ -230,12 +236,13 @@ class _HomeScreenState extends State<HomeScreen> {
               if (lectures.isEmpty)
                 SliverFillRemaining(
                   child: _EmptyState(
-                      onRecord: () => _startRecording(context)),
+                      onRecord: () => _startRecording(context), lp: lp),
                 )
               else if (filtered.isEmpty)
                 SliverFillRemaining(
                   child: _NoResultsState(
                     query: _searchQuery,
+                    lp: lp,
                     onClear: () {
                       setState(() {
                         _searchQuery = '';
@@ -282,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _startRecording(context),
         icon: const Icon(Icons.mic),
-        label: const Text('Record Lecture'),
+        label: Text(lp.translate('record_lecture')),
       ),
     );
   }
@@ -339,29 +346,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // ─── Search Bar ───────────────────────────────────────────────────────────────
 class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.controller, required this.onChanged});
+  const _SearchBar({required this.controller, required this.onChanged, required this.hintText});
   final TextEditingController controller;
+  final String hintText;
   final void Function(String) onChanged;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: ScribTheme.surface,
+        color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(12),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: const TextStyle(color: ScribTheme.onSurface, fontSize: 14),
-        decoration: const InputDecoration(
-          hintText: 'Search lectures or subjects...',
-          hintStyle: TextStyle(color: ScribTheme.textSecondary, fontSize: 13),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(
+            color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, 
+            fontSize: 13
+          ),
           prefixIcon: Icon(Icons.search_rounded,
-              color: ScribTheme.textSecondary, size: 20),
+              color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, 
+              size: 20),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
     );
@@ -370,8 +383,9 @@ class _SearchBar extends StatelessWidget {
 
 // ─── Stats Row ────────────────────────────────────────────────────────────────
 class _StatsRow extends StatelessWidget {
-  const _StatsRow({required this.lectures});
+  const _StatsRow({required this.lectures, required this.lp});
   final List<Lecture> lectures;
+  final LanguageProvider lp;
 
   @override
   Widget build(BuildContext context) {
@@ -388,21 +402,21 @@ class _StatsRow extends StatelessWidget {
       child: Row(
         children: [
           _StatCard(
-            label: 'Lectures',
+            label: lp.translate('lectures_stat'),
             value: '${lectures.length}',
             icon: Icons.play_circle_outline_rounded,
             color: ScribTheme.primary,
           ),
           const SizedBox(width: 10),
           _StatCard(
-            label: 'Notes Ready',
+            label: lp.translate('notes_ready_stat'),
             value: '$completed',
             icon: Icons.description_outlined,
             color: ScribTheme.secondary,
           ),
           const SizedBox(width: 10),
           _StatCard(
-            label: 'Recorded',
+            label: lp.translate('recorded_stat'),
             value: hoursLabel,
             icon: Icons.timer_outlined,
             color: const Color(0xFFF5A623),
@@ -426,11 +440,12 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
         decoration: BoxDecoration(
-          color: ScribTheme.surface,
+          color: Theme.of(context).cardTheme.color,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withOpacity(0.2), width: 1),
         ),
@@ -450,8 +465,10 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(
-                  fontSize: 11, color: ScribTheme.textSecondary),
+              style: TextStyle(
+                fontSize: 11, 
+                color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight
+              ),
             ),
           ],
         ),
@@ -473,6 +490,7 @@ class _SubjectChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       height: 42,
       child: ListView.separated(
@@ -492,12 +510,12 @@ class _SubjectChips extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isSelected
                     ? ScribTheme.primary
-                    : ScribTheme.surface,
+                    : Theme.of(context).cardTheme.color,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected
                       ? ScribTheme.primary
-                      : ScribTheme.surfaceVariant,
+                      : isDark ? ScribTheme.surfaceVariantDark : ScribTheme.surfaceVariantLight,
                 ),
               ),
               child: Text(
@@ -507,7 +525,7 @@ class _SubjectChips extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                   color: isSelected
                       ? Colors.white
-                      : ScribTheme.textSecondary,
+                      : isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight,
                 ),
               ),
             ),
@@ -538,6 +556,7 @@ class _LectureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _subjectColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -577,10 +596,10 @@ class _LectureCard extends StatelessWidget {
                   children: [
                     Text(
                       lecture.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: ScribTheme.onSurface,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -608,16 +627,18 @@ class _LectureCard extends StatelessWidget {
                         ],
                         Text(
                           _formatDuration(lecture.duration),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 12,
-                              color: ScribTheme.textSecondary),
+                              color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           '· ${DateFormat('MMM d').format(lecture.recordedAt)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 12,
-                              color: ScribTheme.textSecondary),
+                              color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight
+                          ),
                         ),
                       ],
                     ),
@@ -638,13 +659,12 @@ class _LectureCard extends StatelessWidget {
                 ),
               ),
               if (lecture.status == LectureStatus.completed)
-                const Icon(Icons.chevron_right,
-                    color: ScribTheme.textSecondary)
+                Icon(Icons.chevron_right,
+                    color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight)
               else
                 GestureDetector(
                   onTap: () => context
-                      .read<LectureProvider>()
-                      .deleteLecture(lecture.id),
+                      .read<LectureProvider>().deleteLecture(lecture.id),
                   child: const Icon(Icons.delete_outline_rounded,
                       color: ScribTheme.error, size: 20),
                 ),
@@ -660,12 +680,15 @@ class _LectureCard extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: ScribTheme.surface,
-        title: const Text('Processing Failed',
-            style: TextStyle(color: ScribTheme.onSurface)),
+        backgroundColor: Theme.of(context).cardTheme.color,
+        title: Text('Processing Failed',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
         content: Text(
           lecture.errorMessage ?? 'Unknown error',
-          style: const TextStyle(color: ScribTheme.textSecondary, fontSize: 13),
+          style: TextStyle(
+            color: Theme.of(context).brightness == Brightness.dark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, 
+            fontSize: 13
+          ),
         ),
         actions: [
           TextButton(
@@ -709,6 +732,7 @@ class _ProcessingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final label = switch (lecture.status) {
       LectureStatus.uploading =>
         'Uploading… ${(lecture.uploadProgress * 100).toStringAsFixed(0)}%',
@@ -720,14 +744,16 @@ class _ProcessingIndicator extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 12, color: ScribTheme.textSecondary)),
+            style: TextStyle(
+                fontSize: 12, 
+                color: isDark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight
+            )),
         const SizedBox(height: 4),
         LinearProgressIndicator(
           value: lecture.status == LectureStatus.uploading
               ? lecture.uploadProgress
               : null,
-          backgroundColor: ScribTheme.surfaceVariant,
+          backgroundColor: isDark ? ScribTheme.surfaceVariantDark : ScribTheme.surfaceVariantLight,
           color: ScribTheme.primary,
           borderRadius: BorderRadius.circular(4),
         ),
@@ -738,8 +764,9 @@ class _ProcessingIndicator extends StatelessWidget {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onRecord});
+  const _EmptyState({required this.onRecord, required this.lp});
   final VoidCallback onRecord;
+  final LanguageProvider lp;
 
   @override
   Widget build(BuildContext context) {
@@ -760,24 +787,28 @@ class _EmptyState extends StatelessWidget {
                   size: 48, color: ScribTheme.primary),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'No lectures yet',
+            Text(
+              lp.translate('no_lectures'),
               style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: ScribTheme.onSurface),
+                  color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Record your first lecture and let AI turn it into study notes automatically.',
+            Text(
+              lp.translate('no_lectures_desc'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: ScribTheme.textSecondary, height: 1.5),
+              style: TextStyle(
+                fontSize: 14, 
+                color: Theme.of(context).brightness == Brightness.dark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight, 
+                height: 1.5
+              ),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: onRecord,
               icon: const Icon(Icons.mic),
-              label: const Text('Start Recording'),
+              label: Text(lp.translate('start_recording')),
               style: FilledButton.styleFrom(
                 backgroundColor: ScribTheme.primary,
                 padding: const EdgeInsets.symmetric(
@@ -795,8 +826,9 @@ class _EmptyState extends StatelessWidget {
 
 // ─── No Results State ─────────────────────────────────────────────────────────
 class _NoResultsState extends StatelessWidget {
-  const _NoResultsState({required this.query, required this.onClear});
+  const _NoResultsState({required this.query, required this.onClear, required this.lp});
   final String query;
+  final LanguageProvider lp;
   final VoidCallback onClear;
 
   @override
@@ -805,27 +837,29 @@ class _NoResultsState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.search_off_rounded,
-              size: 56, color: ScribTheme.textSecondary),
+          Icon(Icons.search_off_rounded,
+              size: 56, 
+              color: Theme.of(context).brightness == Brightness.dark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight),
           const SizedBox(height: 16),
-          const Text(
-            'No lectures found',
+          Text(
+            lp.translate('no_results'),
             style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: ScribTheme.onSurface),
+                color: Theme.of(context).colorScheme.onSurface),
           ),
           const SizedBox(height: 8),
           Text(
-            'Nothing matched "$query"',
-            style: const TextStyle(
-                fontSize: 13, color: ScribTheme.textSecondary),
+            '${lp.translate('nothing_matched')} "$query"',
+            style: TextStyle(
+                fontSize: 13, 
+                color: Theme.of(context).brightness == Brightness.dark ? ScribTheme.textSecondaryDark : ScribTheme.textSecondaryLight),
           ),
           const SizedBox(height: 20),
           TextButton(
             onPressed: onClear,
-            child: const Text('Clear search',
-                style: TextStyle(color: ScribTheme.primary)),
+            child: Text(lp.translate('clear_search'),
+                style: const TextStyle(color: ScribTheme.primary)),
           ),
         ],
       ),
