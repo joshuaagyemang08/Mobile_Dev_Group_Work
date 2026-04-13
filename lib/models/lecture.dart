@@ -74,6 +74,7 @@ class Lecture {
   LectureNotes? notes;
   String? errorMessage;
   double uploadProgress; // 0.0 to 1.0
+  List<String> photoPaths; // attached whiteboard/slide photos
 
   Lecture({
     required this.id,
@@ -87,6 +88,7 @@ class Lecture {
     this.notes,
     this.errorMessage,
     this.uploadProgress = 0.0,
+    this.photoPaths = const [],
   });
 
   Lecture copyWith({
@@ -95,6 +97,7 @@ class Lecture {
     LectureNotes? notes,
     String? errorMessage,
     double? uploadProgress,
+    List<String>? photoPaths,
   }) {
     return Lecture(
       id: id,
@@ -108,6 +111,7 @@ class Lecture {
       notes: notes ?? this.notes,
       errorMessage: errorMessage ?? this.errorMessage,
       uploadProgress: uploadProgress ?? this.uploadProgress,
+      photoPaths: photoPaths ?? this.photoPaths,
     );
   }
 
@@ -127,6 +131,7 @@ class Lecture {
             ? LectureNotes.fromJson(
                 json['notes'] as Map<String, dynamic>)
             : null,
+        photoPaths: List<String>.from(json['photoPaths'] as List? ?? []),
       );
 
   Map<String, dynamic> toJson() => {
@@ -139,9 +144,50 @@ class Lecture {
         'status': status.name,
         'transcript': transcript,
         'notes': notes?.toJson(),
+        'photoPaths': photoPaths,
       };
 
-  // Serialise/deserialise to a single JSON string for SharedPreferences
+  // ── Supabase (snake_case columns) ─────────────────────────────────────────
+
+  Map<String, dynamic> toSupabaseJson(String userId) => {
+        'id': id,
+        'user_id': userId,
+        'title': title,
+        'subject': subject,
+        'recorded_at': recordedAt.toIso8601String(),
+        'duration_seconds': duration.inSeconds,
+        'audio_path': audioPath,
+        'status': status.name,
+        'transcript': transcript,
+        'notes': notes?.toJson(),
+        'photo_paths': photoPaths,
+        'error_message': errorMessage,
+        'upload_progress': uploadProgress,
+      };
+
+  factory Lecture.fromSupabaseJson(Map<String, dynamic> json) => Lecture(
+        id: json['id'] as String,
+        title: json['title'] as String,
+        subject: json['subject'] as String?,
+        recordedAt: DateTime.parse(json['recorded_at'] as String),
+        duration: Duration(seconds: json['duration_seconds'] as int),
+        audioPath: json['audio_path'] as String,
+        status: LectureStatus.values.firstWhere(
+          (e) => e.name == json['status'],
+          orElse: () => LectureStatus.recorded,
+        ),
+        transcript: json['transcript'] as String?,
+        notes: json['notes'] != null
+            ? LectureNotes.fromJson(json['notes'] as Map<String, dynamic>)
+            : null,
+        photoPaths: List<String>.from(json['photo_paths'] as List? ?? []),
+        errorMessage: json['error_message'] as String?,
+        uploadProgress:
+            (json['upload_progress'] as num?)?.toDouble() ?? 0.0,
+      );
+
+  // ── Local (SharedPreferences fallback) ───────────────────────────────────
+
   String toJsonString() => jsonEncode(toJson());
   factory Lecture.fromJsonString(String s) =>
       Lecture.fromJson(jsonDecode(s) as Map<String, dynamic>);

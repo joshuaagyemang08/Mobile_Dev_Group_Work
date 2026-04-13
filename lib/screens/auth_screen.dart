@@ -1,9 +1,14 @@
 // lib/screens/auth_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/supabase_config.dart';
 import '../core/theme.dart';
 import 'home_screen.dart';
+import 'forgot_password_screen.dart';
+import 'email_verification_screen.dart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,81 +162,130 @@ class _AuthScreenState extends State<AuthScreen>
   Future<void> _submit() async {
     setState(() => _submitted = true);
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-    final prefs = await SharedPreferences.getInstance();
+
     final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text;
+    final client = Supabase.instance.client;
 
-    await Future.delayed(const Duration(milliseconds: 1200)); // simulate network
+    try {
+      if (_isLogin) {
+        // ── Login flow ──
+        await client.auth.signInWithPassword(email: email, password: password);
 
-    if (_isLogin) {
-      // ── Login flow ──
-      final storedEmail = prefs.getString('user_email');
-      final storedPassword = prefs.getString('user_password');
+        // Sync name to SharedPreferences for greeting
+        final user = client.auth.currentUser;
+        final name = user?.userMetadata?['name'] as String? ?? '';
+        if (name.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_name', name);
+        }
 
-      if (storedEmail == null || storedEmail != email) {
+        if (mounted) {
+          _showSuccess('Welcome back!');
+          await Future.delayed(const Duration(milliseconds: 600));
+          _navigateToHome();
+        }
+      } else {
+        // ── Register flow ──
+        final name = _nameController.text.trim();
+        await client.auth.signUp(
+          email: email,
+          password: password,
+          data: {'name': name},
+          emailRedirectTo: SupabaseConfig.redirectUrl,
+        );
+
+        // Save name locally for greeting
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_name', name);
+
         if (mounted) {
           setState(() => _isLoading = false);
-          _showError('No account found with this email. Please register first.');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EmailVerificationScreen(email: email),
+            ),
+          );
         }
         return;
       }
-
-      if (storedPassword != password) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _showError('Incorrect password. Please try again.');
-        }
-        return;
-      }
-
-      await prefs.setBool('is_logged_in', true);
+    } on AuthException catch (e) {
       if (mounted) {
-        _showSuccess('Welcome back!');
-        await Future.delayed(const Duration(milliseconds: 800));
-        _navigateToHome();
+        setState(() => _isLoading = false);
+        _showError(e.message);
       }
-    } else {
-      // ── Register flow ──
-      final existingEmail = prefs.getString('user_email');
-
-      if (existingEmail != null && existingEmail == email) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _showError('An account with this email already exists. Please log in.');
-        }
-        return;
-      }
-
-      await prefs.setString('user_name', _nameController.text.trim());
-      await prefs.setString('user_email', email);
-      await prefs.setString('user_password', password);
-      await prefs.setBool('is_logged_in', true);
-
+    } catch (e) {
       if (mounted) {
-        _showSuccess('Account created successfully!');
-        await Future.delayed(const Duration(milliseconds: 800));
-        _navigateToHome();
+        setState(() => _isLoading = false);
+        _showError('Something went wrong. Please try again.');
       }
     }
   }
 
   Future<void> _googleSignIn() async {
+    if (SupabaseConfig.googleWebClientId
+        .startsWith('YOUR_WEB_CLIENT_ID')) {
+      _showError(
+          'Google Sign-In is not configured yet. Please use email & password.');
+      return;
+    }
+
     setState(() => _isLoading = true);
+    try {
+      final googleSignIn = GoogleSignIn(
+        serverClientId: SupabaseConfig.googleWebClientId,
+        scopes: ['email', 'profile'],
+      );
 
-    // Simulate Google auth flow
-    await Future.delayed(const Duration(milliseconds: 1800));
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled the picker
+        setState(() => _isLoading = false);
+        return;
+      }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', 'Student');
-    await prefs.setString('user_email', 'user@gmail.com');
-    await prefs.setBool('is_logged_in', true);
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null) {
+        setState(() => _isLoading = false);
+        _showError('Google Sign-In failed. Please try again.');
+        return;
+      }
 
-    if (mounted) {
-      _showSuccess('Signed in with Google!');
-      await Future.delayed(const Duration(milliseconds: 800));
-      _navigateToHome();
+      await Supabase.instance.client.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: googleAuth.accessToken,
+      );
+
+      // Sync display name to SharedPreferences for the greeting
+      final user = Supabase.instance.client.auth.currentUser;
+      final name = (user?.userMetadata?['full_name'] as String?) ??
+          (user?.userMetadata?['name'] as String?) ??
+          googleUser.displayName ??
+          '';
+      if (name.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_name', name);
+      }
+
+      if (mounted) {
+        _showSuccess('Signed in with Google!');
+        await Future.delayed(const Duration(milliseconds: 500));
+        _navigateToHome();
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showError(e.message);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showError('Google Sign-In failed. Please try again.');
+      }
     }
   }
 
@@ -416,8 +470,12 @@ class _AuthScreenState extends State<AuthScreen>
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () => _showError(
-                                  'Password reset is not available in this version.'),
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ForgotPasswordScreen()),
+                              ),
                               child: const Text(
                                 'Forgot Password?',
                                 style: TextStyle(

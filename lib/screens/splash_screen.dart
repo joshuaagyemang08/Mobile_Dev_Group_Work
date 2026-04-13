@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
 import 'auth_screen.dart';
 import 'home_screen.dart';
@@ -94,7 +95,18 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       final onboardingDone = prefs.getBool('onboarding_complete') ?? false;
-      final loggedIn = prefs.getBool('is_logged_in') ?? false;
+      final session = Supabase.instance.client.auth.currentSession;
+      final loggedIn = session != null;
+
+      // Sync name from Supabase metadata to SharedPreferences for greeting
+      if (loggedIn) {
+        final user = Supabase.instance.client.auth.currentUser;
+        final name = user?.userMetadata?['name'] as String? ?? '';
+        if (name.isNotEmpty) {
+          await prefs.setString('user_name', name);
+        }
+      }
+
       if (!mounted) return;
       final Widget next = !onboardingDone
           ? const OnboardingScreen()

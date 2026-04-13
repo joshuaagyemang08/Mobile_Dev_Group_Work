@@ -1,10 +1,15 @@
 // lib/screens/notes_screen.dart
 
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../core/theme.dart';
 import '../models/lecture.dart';
+import '../providers/lecture_provider.dart';
 
 class NotesScreen extends StatefulWidget {
   final Lecture lecture;
@@ -17,118 +22,231 @@ class NotesScreen extends StatefulWidget {
 class _NotesScreenState extends State<NotesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: 4, vsync: this);
+      TabController(length: 5, vsync: this);
+
+  // ── Audio player state ────────────────────────────────────────────────────
+  final _player = AudioPlayer();
+  PlayerState _playerState = PlayerState.stopped;
+  Duration _position = Duration.zero;
+  Duration _total = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _playerState = s);
+    });
+    _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _total = d);
+    });
+  }
 
   @override
   void dispose() {
+    _player.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
+  Future<void> _togglePlayback() async {
+    if (_playerState == PlayerState.playing) {
+      await _player.pause();
+    } else {
+      await _player.play(DeviceFileSource(widget.lecture.audioPath));
+    }
+  }
+
+  Future<void> _seekTo(double value) async {
+    final pos = Duration(milliseconds: (value * _total.inMilliseconds).round());
+    await _player.seek(pos);
+  }
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  Future<void> _takePhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final notes = widget.lecture.notes;
+    return Consumer<LectureProvider>(
+      builder: (context, provider, _) {
+        // Always get the latest lecture from provider so photos update live
+        final lecture = provider.lectures.firstWhere(
+          (l) => l.id == widget.lecture.id,
+          orElse: () => widget.lecture,
+        );
+        final notes = lecture.notes;
 
-    return Scaffold(
-      backgroundColor: ScribTheme.background,
-      appBar: AppBar(
-        backgroundColor: ScribTheme.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: ScribTheme.onSurface, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.lecture.title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: ScribTheme.onSurface,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+        return Scaffold(
+          backgroundColor: ScribTheme.background,
+          appBar: AppBar(
+            backgroundColor: ScribTheme.background,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: ScribTheme.onSurface, size: 20),
+              onPressed: () => Navigator.pop(context),
             ),
-            if (widget.lecture.subject != null)
-              Text(
-                widget.lecture.subject!,
-                style: const TextStyle(
-                    fontSize: 12, color: ScribTheme.textSecondary),
-              ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.copy_outlined,
-                color: ScribTheme.textSecondary, size: 20),
-            tooltip: 'Copy notes',
-            onPressed: () {
-              Clipboard.setData(
-                  ClipboardData(text: notes?.fullNotes ?? ''));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.check_circle_outline,
-                          color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text('Notes copied to clipboard'),
-                    ],
-                  ),
-                  backgroundColor: ScribTheme.secondary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                  bottom: BorderSide(
-                      color: ScribTheme.surfaceVariant, width: 1)),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: ScribTheme.primary,
-              indicatorWeight: 2,
-              indicatorSize: TabBarIndicatorSize.label,
-              labelColor: ScribTheme.primary,
-              unselectedLabelColor: ScribTheme.textSecondary,
-              labelStyle: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600),
-              unselectedLabelStyle:
-                  const TextStyle(fontSize: 13),
-              tabs: const [
-                Tab(text: 'Notes'),
-                Tab(text: 'Summary'),
-                Tab(text: 'Flashcards'),
-                Tab(text: 'Transcript'),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: notes == null
-          ? _buildNoNotes()
-          : TabBarView(
-              controller: _tabController,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _NotesTab(notes: notes),
-                _SummaryTab(notes: notes),
-                _FlashcardsTab(flashcards: notes.flashcards),
-                _TranscriptTab(transcript: widget.lecture.transcript),
+                Text(
+                  lecture.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: ScribTheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (lecture.subject != null)
+                  Text(
+                    lecture.subject!,
+                    style: const TextStyle(
+                        fontSize: 12, color: ScribTheme.textSecondary),
+                  ),
               ],
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.copy_outlined,
+                    color: ScribTheme.textSecondary, size: 20),
+                tooltip: 'Copy notes',
+                onPressed: () {
+                  Clipboard.setData(
+                      ClipboardData(text: notes?.fullNotes ?? ''));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Row(
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: Colors.white, size: 18),
+                          SizedBox(width: 8),
+                          Text('Notes copied to clipboard'),
+                        ],
+                      ),
+                      backgroundColor: ScribTheme.secondary,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(
+                          color: ScribTheme.surfaceVariant, width: 1)),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: ScribTheme.primary,
+                  indicatorWeight: 2,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  labelColor: ScribTheme.primary,
+                  unselectedLabelColor: ScribTheme.textSecondary,
+                  labelStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                  unselectedLabelStyle: const TextStyle(fontSize: 12),
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    const Tab(text: 'Notes'),
+                    const Tab(text: 'Summary'),
+                    const Tab(text: 'Flashcards'),
+                    const Tab(text: 'Transcript'),
+                    Tab(
+                      child: Row(
+                        children: [
+                          const Text('Photos'),
+                          if (lecture.photoPaths.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: ScribTheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${lecture.photoPaths.length}',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Audio player bar at the bottom
+          bottomNavigationBar: _AudioPlayerBar(
+            audioPath: lecture.audioPath,
+            playerState: _playerState,
+            position: _position,
+            total: _total,
+            onToggle: _togglePlayback,
+            onSeek: _seekTo,
+            formatDuration: _formatDuration,
+          ),
+          body: notes == null
+              ? _buildNoNotes()
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _NotesTab(notes: notes),
+                    _SummaryTab(notes: notes),
+                    _FlashcardsTab(flashcards: notes.flashcards),
+                    _TranscriptTab(transcript: lecture.transcript),
+                    _PhotosTab(
+                      lecture: lecture,
+                      onTakePhoto: _takePhoto,
+                      onPickGallery: _pickFromGallery,
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -144,6 +262,116 @@ class _NotesScreenState extends State<NotesScreen>
               style: TextStyle(
                   fontSize: 16, color: ScribTheme.textSecondary)),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Audio Player Bar ─────────────────────────────────────────────────────────
+
+class _AudioPlayerBar extends StatelessWidget {
+  const _AudioPlayerBar({
+    required this.audioPath,
+    required this.playerState,
+    required this.position,
+    required this.total,
+    required this.onToggle,
+    required this.onSeek,
+    required this.formatDuration,
+  });
+
+  final String audioPath;
+  final PlayerState playerState;
+  final Duration position;
+  final Duration total;
+  final VoidCallback onToggle;
+  final void Function(double) onSeek;
+  final String Function(Duration) formatDuration;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPlaying = playerState == PlayerState.playing;
+    final progress = total.inMilliseconds > 0
+        ? position.inMilliseconds / total.inMilliseconds
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      decoration: BoxDecoration(
+        color: ScribTheme.surface,
+        border: const Border(
+            top: BorderSide(color: ScribTheme.surfaceVariant, width: 1)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: ScribTheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.mic_rounded,
+                      color: ScribTheme.primary, size: 14),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Lecture Recording',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: ScribTheme.onSurface),
+                  ),
+                ),
+                Text(
+                  '${formatDuration(position)} / ${formatDuration(total)}',
+                  style: const TextStyle(
+                      fontSize: 11, color: ScribTheme.textSecondary),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: onToggle,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: ScribTheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                activeTrackColor: ScribTheme.primary,
+                inactiveTrackColor: ScribTheme.surfaceVariant,
+                thumbColor: ScribTheme.primary,
+                overlayColor: ScribTheme.primary.withOpacity(0.2),
+              ),
+              child: Slider(
+                value: progress.clamp(0.0, 1.0),
+                onChanged: onSeek,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -223,9 +451,7 @@ class _MarkdownText extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  line.startsWith('- ')
-                      ? line.substring(2)
-                      : line.substring(2),
+                  line.substring(2),
                   style: const TextStyle(
                       fontSize: 14,
                       color: ScribTheme.onSurface,
@@ -614,8 +840,7 @@ class _FlashcardsTabState extends State<_FlashcardsTab>
                   label: const Text('Next'),
                   style: FilledButton.styleFrom(
                     backgroundColor: ScribTheme.primary,
-                    disabledBackgroundColor:
-                        ScribTheme.surfaceVariant,
+                    disabledBackgroundColor: ScribTheme.surfaceVariant,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
@@ -667,10 +892,9 @@ class _CardFace extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // Label badge
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 5),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
               decoration: BoxDecoration(
                 color: labelColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(20),
@@ -683,9 +907,7 @@ class _CardFace extends StatelessWidget {
                       color: labelColor,
                       letterSpacing: 1)),
             ),
-
             const Spacer(),
-
             Text(
               text,
               textAlign: TextAlign.center,
@@ -696,9 +918,7 @@ class _CardFace extends StatelessWidget {
                 height: 1.5,
               ),
             ),
-
             const Spacer(),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -758,7 +978,6 @@ class _TranscriptTabState extends State<_TranscriptTab> {
 
     return Column(
       children: [
-        // Top bar with word count + copy
         Container(
           padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
           decoration: const BoxDecoration(
@@ -796,8 +1015,8 @@ class _TranscriptTabState extends State<_TranscriptTab> {
                           : ScribTheme.primary),
                 ),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8)),
                 ),
@@ -805,7 +1024,6 @@ class _TranscriptTabState extends State<_TranscriptTab> {
             ],
           ),
         ),
-
         Expanded(
           child: SelectionArea(
             child: SingleChildScrollView(
@@ -822,6 +1040,218 @@ class _TranscriptTabState extends State<_TranscriptTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Tab 5: Photos ────────────────────────────────────────────────────────────
+
+class _PhotosTab extends StatelessWidget {
+  const _PhotosTab({
+    required this.lecture,
+    required this.onTakePhoto,
+    required this.onPickGallery,
+  });
+
+  final Lecture lecture;
+  final VoidCallback onTakePhoto;
+  final VoidCallback onPickGallery;
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = lecture.photoPaths;
+
+    return Column(
+      children: [
+        // Action buttons
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onTakePhoto,
+                  icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                  label: const Text('Take Photo'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ScribTheme.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickGallery,
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: const Text('Gallery'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ScribTheme.primary,
+                    side: BorderSide(
+                        color: ScribTheme.primary.withOpacity(0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        if (photos.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: ScribTheme.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add_photo_alternate_outlined,
+                        size: 38, color: ScribTheme.primary),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('No photos yet',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: ScribTheme.onSurface)),
+                  const SizedBox(height: 6),
+                  const Text('Capture whiteboard or slides\nfrom this lecture',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: ScribTheme.textSecondary,
+                          height: 1.5)),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: photos.length,
+              itemBuilder: (context, i) {
+                return _PhotoTile(
+                  path: photos[i],
+                  onDelete: () => context
+                      .read<LectureProvider>()
+                      .deletePhoto(lecture.id, photos[i]),
+                  onTap: () => _viewPhoto(context, photos, i),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _viewPhoto(BuildContext context, List<String> photos, int index) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _PhotoViewScreen(photos: photos, initialIndex: index),
+      ),
+    );
+  }
+}
+
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile(
+      {required this.path, required this.onDelete, required this.onTap});
+  final String path;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              File(path),
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: ScribTheme.surface,
+                child: const Icon(Icons.broken_image_outlined,
+                    color: ScribTheme.textSecondary),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: GestureDetector(
+              onTap: onDelete,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoViewScreen extends StatefulWidget {
+  const _PhotoViewScreen(
+      {required this.photos, required this.initialIndex});
+  final List<String> photos;
+  final int initialIndex;
+
+  @override
+  State<_PhotoViewScreen> createState() => _PhotoViewScreenState();
+}
+
+class _PhotoViewScreenState extends State<_PhotoViewScreen> {
+  late final PageController _pageController =
+      PageController(initialPage: widget.initialIndex);
+  late int _current = widget.initialIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_current + 1} / ${widget.photos.length}',
+            style: const TextStyle(color: Colors.white)),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.photos.length,
+        onPageChanged: (i) => setState(() => _current = i),
+        itemBuilder: (_, i) => InteractiveViewer(
+          child: Center(
+            child: Image.file(File(widget.photos[i])),
+          ),
+        ),
+      ),
     );
   }
 }
