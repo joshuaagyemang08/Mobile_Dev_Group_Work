@@ -1,81 +1,19 @@
 // lib/screens/notes_screen.dart
-//
-// home_screen.dart. All four Member 4 TODOs are implemented:
-//   ✅ _FlashcardsView  — 3D flip animation, swipe gestures, progress bar
-//   ✅ _TranscriptView  — search bar with highlight + scroll-to-first-match
-//   ✅ Share / Export   — share sheet (PDF text + copy Markdown)
-//   ✅ _NotesView TOC   — floating drawer listing every ## heading
 
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../core/theme.dart';
 import '../models/lecture.dart';
-
-// ─── Palette (mirrors home_screen.dart) ──────────────────────────────────────
-const _ink     = Color(0xFF1A1228);
-const _purple  = Color(0xFF6C63E9);
-const _purpleL = Color(0xFFEEEDFE);
-const _purpleM = Color(0xFFCECBF6);
-const _green   = Color(0xFF1D9E75);
-const _greenL  = Color(0xFFE1F5EE);
-const _amber   = Color(0xFFBA7517);
-const _amberL  = Color(0xFFFAEEDA);
-const _pink    = Color(0xFF993556);
-const _pinkL   = Color(0xFFFBEAF0);
-const _cream   = Color(0xFFF9F4EE);
-const _red     = Color(0xFFE24B4A);
-
-// ─── Shared ink-bordered container ───────────────────────────────────────────
-
-class _InkBox extends StatelessWidget {
-  const _InkBox({
-    required this.child,
-    this.color = Colors.white,
-    this.width,
-    this.height,
-    this.radius = 20.0,
-    this.padding,
-    this.onTap,
-  });
-  final Widget child;
-  final Color color;
-  final double? width, height;
-  final double radius;
-  final EdgeInsetsGeometry? padding;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final box = Container(
-      width: width,
-      height: height,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: _ink, width: 2),
-      ),
-      child: child,
-    );
-    if (onTap == null) return box;
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: box,
-      ),
-    );
-  }
-}
-
-// ─── Notes Screen ─────────────────────────────────────────────────────────────
+import '../providers/lecture_provider.dart';
 
 class NotesScreen extends StatefulWidget {
-  const NotesScreen({super.key, required this.lecture});
   final Lecture lecture;
+  const NotesScreen({super.key, required this.lecture});
 
   @override
   State<NotesScreen> createState() => _NotesScreenState();
@@ -84,676 +22,908 @@ class NotesScreen extends StatefulWidget {
 class _NotesScreenState extends State<NotesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: 4, vsync: this);
+      TabController(length: 5, vsync: this);
 
-  void _share() {
-    final notes = widget.lecture.notes;
-    if (notes == null) return;
-    Share.share(
-      notes.fullNotes,
-      subject: widget.lecture.title,
-    );
+  // ── Audio player state ────────────────────────────────────────────────────
+  final _player = AudioPlayer();
+  PlayerState _playerState = PlayerState.stopped;
+  Duration _position = Duration.zero;
+  Duration _total = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _playerState = s);
+    });
+    _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _total = d);
+    });
   }
 
   @override
   void dispose() {
+    _player.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
+  Future<void> _togglePlayback() async {
+    if (_playerState == PlayerState.playing) {
+      await _player.pause();
+    } else {
+      await _player.play(DeviceFileSource(widget.lecture.audioPath));
+    }
+  }
+
+  Future<void> _seekTo(double value) async {
+    final pos = Duration(milliseconds: (value * _total.inMilliseconds).round());
+    await _player.seek(pos);
+  }
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  Future<void> _takePhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final notes = widget.lecture.notes;
+    return Consumer<LectureProvider>(
+      builder: (context, provider, _) {
+        // Always get the latest lecture from provider so photos update live
+        final lecture = provider.lectures.firstWhere(
+          (l) => l.id == widget.lecture.id,
+          orElse: () => widget.lecture,
+        );
+        final notes = lecture.notes;
 
-    return Scaffold(
-      backgroundColor: _cream,
-      appBar: AppBar(
-        backgroundColor: _cream,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: _InkBox(
-          width: 36,
-          height: 36,
-          radius: 10,
-          color: Colors.white,
-          onTap: () => Navigator.pop(context),
-          child: const Icon(Icons.arrow_back_rounded, size: 18, color: _ink),
-        ).withPadding(const EdgeInsets.only(left: 12, top: 6, bottom: 6)),
-        leadingWidth: 60,
-        title: Text(
-          widget.lecture.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: _ink,
-            letterSpacing: -.3,
-          ),
-        ),
-        actions: [
-          _InkBox(
-            width: 36,
-            height: 36,
-            radius: 10,
-            color: _purpleL,
-            onTap: _share,
-            child: const Icon(Icons.ios_share_rounded, size: 16, color: _purple),
-          ).withPadding(
-              const EdgeInsets.only(right: 12, top: 6, bottom: 6)),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(52),
-          child: _TabRow(controller: _tabController),
-        ),
-      ),
-      body: notes == null
-          ? _EmptyNotes()
-          : TabBarView(
-              controller: _tabController,
+        return Scaffold(
+          backgroundColor: ScribTheme.background,
+          appBar: AppBar(
+            backgroundColor: ScribTheme.background,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: ScribTheme.onSurface, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _NotesView(notes: notes),
-                _SummaryView(notes: notes),
-                _FlashcardsView(notes: notes),
-                _TranscriptView(transcript: widget.lecture.transcript),
+                Text(
+                  lecture.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: ScribTheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (lecture.subject != null)
+                  Text(
+                    lecture.subject!,
+                    style: const TextStyle(
+                        fontSize: 12, color: ScribTheme.textSecondary),
+                  ),
               ],
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.copy_outlined,
+                    color: ScribTheme.textSecondary, size: 20),
+                tooltip: 'Copy notes',
+                onPressed: () {
+                  Clipboard.setData(
+                      ClipboardData(text: notes?.fullNotes ?? ''));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Row(
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: Colors.white, size: 18),
+                          SizedBox(width: 8),
+                          Text('Notes copied to clipboard'),
+                        ],
+                      ),
+                      backgroundColor: ScribTheme.secondary,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(
+                          color: ScribTheme.surfaceVariant, width: 1)),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: ScribTheme.primary,
+                  indicatorWeight: 2,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  labelColor: ScribTheme.primary,
+                  unselectedLabelColor: ScribTheme.textSecondary,
+                  labelStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                  unselectedLabelStyle: const TextStyle(fontSize: 12),
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    const Tab(text: 'Notes'),
+                    const Tab(text: 'Summary'),
+                    const Tab(text: 'Flashcards'),
+                    const Tab(text: 'Transcript'),
+                    Tab(
+                      child: Row(
+                        children: [
+                          const Text('Photos'),
+                          if (lecture.photoPaths.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: ScribTheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${lecture.photoPaths.length}',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Audio player bar at the bottom
+          bottomNavigationBar: _AudioPlayerBar(
+            audioPath: lecture.audioPath,
+            playerState: _playerState,
+            position: _position,
+            total: _total,
+            onToggle: _togglePlayback,
+            onSeek: _seekTo,
+            formatDuration: _formatDuration,
+          ),
+          body: notes == null
+              ? _buildNoNotes()
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _NotesTab(notes: notes),
+                    _SummaryTab(notes: notes),
+                    _FlashcardsTab(flashcards: notes.flashcards),
+                    _TranscriptTab(transcript: lecture.transcript),
+                    _PhotosTab(
+                      lecture: lecture,
+                      onTakePhoto: _takePhoto,
+                      onPickGallery: _pickFromGallery,
+                    ),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNoNotes() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.description_outlined,
+              color: ScribTheme.textSecondary, size: 52),
+          SizedBox(height: 16),
+          Text('Notes not available',
+              style: TextStyle(
+                  fontSize: 16, color: ScribTheme.textSecondary)),
+        ],
+      ),
     );
   }
 }
 
-// ─── Custom Tab Row ───────────────────────────────────────────────────────────
+// ─── Audio Player Bar ─────────────────────────────────────────────────────────
 
-class _TabRow extends StatelessWidget {
-  const _TabRow({required this.controller});
-  final TabController controller;
+class _AudioPlayerBar extends StatelessWidget {
+  const _AudioPlayerBar({
+    required this.audioPath,
+    required this.playerState,
+    required this.position,
+    required this.total,
+    required this.onToggle,
+    required this.onSeek,
+    required this.formatDuration,
+  });
 
-  static const _labels = ['Notes', 'Summary', 'Flashcards', 'Transcript'];
+  final String audioPath;
+  final PlayerState playerState;
+  final Duration position;
+  final Duration total;
+  final VoidCallback onToggle;
+  final void Function(double) onSeek;
+  final String Function(Duration) formatDuration;
 
   @override
-  Widget build(BuildContext context) => Container(
-        height: 52,
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-        child: TabBar(
-          controller: controller,
-          indicator: BoxDecoration(
-            color: _ink,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          dividerColor: Colors.transparent,
-          splashBorderRadius: BorderRadius.circular(20),
-          labelColor: Colors.white,
-          unselectedLabelColor: _ink,
-          labelStyle: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: .2),
-          unselectedLabelStyle: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w600),
-          tabs: _labels.map((l) => Tab(text: l)).toList(),
-        ),
-      );
-}
+  Widget build(BuildContext context) {
+    final isPlaying = playerState == PlayerState.playing;
+    final progress = total.inMilliseconds > 0
+        ? position.inMilliseconds / total.inMilliseconds
+        : 0.0;
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
-
-class _EmptyNotes extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Center(
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      decoration: BoxDecoration(
+        color: ScribTheme.surface,
+        border: const Border(
+            top: BorderSide(color: ScribTheme.surfaceVariant, width: 1)),
+      ),
+      child: SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _InkBox(
-              width: 70,
-              height: 70,
-              radius: 20,
-              color: _purpleL,
-              child: const Icon(Icons.notes_rounded, size: 30, color: _purple),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: ScribTheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.mic_rounded,
+                      color: ScribTheme.primary, size: 14),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Lecture Recording',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: ScribTheme.onSurface),
+                  ),
+                ),
+                Text(
+                  '${formatDuration(position)} / ${formatDuration(total)}',
+                  style: const TextStyle(
+                      fontSize: 11, color: ScribTheme.textSecondary),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: onToggle,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: ScribTheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            const Text('Notes not available',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _ink)),
+            const SizedBox(height: 8),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                activeTrackColor: ScribTheme.primary,
+                inactiveTrackColor: ScribTheme.surfaceVariant,
+                thumbColor: ScribTheme.primary,
+                overlayColor: ScribTheme.primary.withOpacity(0.2),
+              ),
+              child: Slider(
+                value: progress.clamp(0.0, 1.0),
+                onChanged: onSeek,
+              ),
+            ),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
-// ─── Tab 1: Full Notes + Floating TOC ────────────────────────────────────────
+// ─── Tab 1: Notes ─────────────────────────────────────────────────────────────
 
-class _NotesView extends StatefulWidget {
-  const _NotesView({required this.notes});
+class _NotesTab extends StatelessWidget {
+  const _NotesTab({required this.notes});
   final LectureNotes notes;
 
   @override
-  State<_NotesView> createState() => _NotesViewState();
-}
+  Widget build(BuildContext context) {
+    final fullNotes = notes.fullNotes;
 
-class _NotesViewState extends State<_NotesView> {
-  bool _tocOpen = false;
+    if (fullNotes.isEmpty) {
+      return const Center(
+        child: Text('No notes content',
+            style: TextStyle(color: ScribTheme.textSecondary)),
+      );
+    }
 
-  List<String> get _headings => widget.notes.fullNotes
-      .split('\n')
-      .where((l) => l.startsWith('## '))
-      .map((l) => l.replaceFirst('## ', ''))
-      .toList();
-
-  @override
-  Widget build(BuildContext context) => Stack(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Markdown content
-          Markdown(
-            data: widget.notes.fullNotes,
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-            styleSheet: MarkdownStyleSheet(
-              h1: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: _ink,
-                  letterSpacing: -.5),
-              h2: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: _purple),
-              h3: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: _green),
-              p: const TextStyle(
-                  fontSize: 14, color: _ink, height: 1.65),
-              listBullet: const TextStyle(
-                  fontSize: 14, color: _ink, height: 1.65),
-              strong: const TextStyle(
-                  fontWeight: FontWeight.w700, color: _ink),
-              blockquoteDecoration: BoxDecoration(
-                color: _purpleL,
-                border: const Border(
-                    left: BorderSide(color: _purple, width: 3)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              code: const TextStyle(
-                  fontFamily: 'monospace',
-                  backgroundColor: Color(0xFFF2EAE4),
-                  fontSize: 13),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: ScribTheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: ScribTheme.surfaceVariant),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: ScribTheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.menu_book_rounded,
+                      size: 18, color: ScribTheme.primary),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Lecture Notes',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: ScribTheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-
-          // TOC drawer slide-in from right
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeInOut,
-            right: _tocOpen ? 0 : -240,
-            top: 0,
-            bottom: 0,
-            width: 220,
-            child: _TocDrawer(
-              headings: _headings,
-              onClose: () => setState(() => _tocOpen = false),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: ScribTheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: ScribTheme.surfaceVariant),
             ),
-          ),
-
-          // TOC toggle button (bottom-right)
-          Positioned(
-            right: 16,
-            bottom: 24,
-            child: _InkBox(
-              radius: 14,
-              color: _tocOpen ? _ink : _purpleL,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 10),
-              onTap: () => setState(() => _tocOpen = !_tocOpen),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.list_rounded,
-                      size: 16,
-                      color: _tocOpen ? Colors.white : _purple),
-                  const SizedBox(width: 6),
-                  Text('Contents',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: _tocOpen ? Colors.white : _purple)),
-                ],
-              ),
-            ),
+            child: _MarkdownText(content: fullNotes),
           ),
         ],
-      );
+      ),
+    );
+  }
 }
 
-class _TocDrawer extends StatelessWidget {
-  const _TocDrawer(
-      {required this.headings, required this.onClose});
-  final List<String> headings;
-  final VoidCallback onClose;
+class _MarkdownText extends StatelessWidget {
+  const _MarkdownText({required this.content});
+  final String content;
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(left: BorderSide(color: _ink, width: 2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text('Contents',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _ink)),
-                  ),
-                  GestureDetector(
-                    onTap: onClose,
-                    child: const Icon(Icons.close_rounded,
-                        size: 18, color: _ink),
-                  ),
-                ],
+  Widget build(BuildContext context) {
+    final lines = content.split('\n');
+    final widgets = <Widget>[];
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      final numbered = RegExp(r'^(\d+)\.\s+(.*)$').firstMatch(trimmed);
+
+      if (line.startsWith('# ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 12),
+          child: Text(_cleanInlineMarkdown(line.substring(2)),
+              style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: ScribTheme.onSurface)),
+        ));
+      } else if (line.startsWith('## ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 18, bottom: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: const BoxDecoration(
+                  color: ScribTheme.primary,
+                  shape: BoxShape.circle,
+                ),
               ),
-            ),
-            const Divider(
-                color: _ink, thickness: 1.5, height: 1),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: headings.length,
-                itemBuilder: (_, i) => InkWell(
-                  onTap: onClose,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 4,
-                          decoration: const BoxDecoration(
-                              color: _purple,
-                              shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(headings[i],
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: _ink,
-                                  fontWeight: FontWeight.w500),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
+              Expanded(
+                child: Text(_cleanInlineMarkdown(line.substring(3)),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: ScribTheme.primary)),
+              ),
+            ],
+          ),
+        ));
+      } else if (line.startsWith('### ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 6),
+          child: Text(_cleanInlineMarkdown(line.substring(4)),
+              style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: ScribTheme.secondary)),
+        ));
+      } else if (numbered != null) {
+        final number = numbered.group(1) ?? '';
+        final body = _cleanInlineMarkdown(numbered.group(2) ?? '');
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 9),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                margin: const EdgeInsets.only(right: 10, top: 1),
+                decoration: BoxDecoration(
+                  color: ScribTheme.primary.withOpacity(0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    number,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: ScribTheme.primary,
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      );
+              Expanded(
+                child: Text(
+                  body,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: ScribTheme.onSurface,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ));
+      } else if (line.startsWith('- ') || line.startsWith('• ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 6, left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 7, right: 8),
+                child: Icon(Icons.circle,
+                    size: 5, color: ScribTheme.textSecondary),
+              ),
+              Expanded(
+                child: Text(
+                  _cleanInlineMarkdown(line.substring(2)),
+                  style: const TextStyle(
+                      fontSize: 14,
+                      color: ScribTheme.onSurface,
+                      height: 1.6),
+                ),
+              ),
+            ],
+          ),
+        ));
+      } else if (trimmed.isEmpty) {
+        widgets.add(const SizedBox(height: 10));
+      } else {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(_cleanInlineMarkdown(line),
+              style: const TextStyle(
+                  fontSize: 14.5,
+                  color: ScribTheme.onSurface,
+                  height: 1.6)),
+        ));
+      }
+    }
+
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
+  }
 }
 
-// ─── Tab 2: Summary + Key Points ─────────────────────────────────────────────
+String _cleanInlineMarkdown(String input) {
+  return input
+      .replaceAll('**', '')
+      .replaceAll('__', '')
+      .replaceAllMapped(RegExp(r'`([^`]*)`'), (m) => m.group(1) ?? '');
+}
 
-class _SummaryView extends StatelessWidget {
-  const _SummaryView({required this.notes});
+// ─── Tab 2: Summary ───────────────────────────────────────────────────────────
+
+class _SummaryTab extends StatelessWidget {
+  const _SummaryTab({required this.notes});
   final LectureNotes notes;
 
   @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Topics chips
+          if (notes.summary.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ScribTheme.primary.withOpacity(0.22),
+                    ScribTheme.secondary.withOpacity(0.16),
+                  ],
+                ),
+                border: Border.all(
+                  color: ScribTheme.primary.withOpacity(0.24),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: ScribTheme.primary.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.summarize_rounded,
+                            color: ScribTheme.primary, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Quick Summary',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: ScribTheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _cleanInlineMarkdown(notes.summary),
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      color: ScribTheme.onSurface,
+                      height: 1.65,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
+
+          // Topics
           if (notes.topics.isNotEmpty) ...[
-            _SectionLabel(label: 'Topics covered'),
+            const Text('Topics Covered',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: ScribTheme.textSecondary,
+                    letterSpacing: 0.5)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: notes.topics
-                  .map((t) => _TopicChip(label: t))
+                  .map((t) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: ScribTheme.secondary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: ScribTheme.secondary.withOpacity(0.3)),
+                        ),
+                        child: Text(t,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: ScribTheme.secondary,
+                                fontWeight: FontWeight.w500)),
+                      ))
                   .toList(),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
 
-          // Summary
-          _SectionCard(
-            icon: Icons.summarize_outlined,
-            title: 'Summary',
-            color: _purpleL,
-            accentColor: _purple,
-            child: Text(notes.summary,
-                style: const TextStyle(
-                    fontSize: 14, color: _ink, height: 1.65)),
-          ),
-          const SizedBox(height: 14),
-
-          // Key points
-          _SectionCard(
-            icon: Icons.lightbulb_outline_rounded,
-            title: 'Key points',
-            color: _greenL,
-            accentColor: _green,
-            child: Column(
-              children: notes.keyPoints
-                  .asMap()
-                  .entries
-                  .map((e) => _KeyPoint(index: e.key + 1, text: e.value))
-                  .toList(),
-            ),
-          ),
-        ],
-      );
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Text(
-        label.toUpperCase(),
-        style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: .6,
-            color: _ink),
-      );
-}
-
-class _TopicChip extends StatelessWidget {
-  const _TopicChip({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => _InkBox(
-        radius: 20,
-        color: _greenL,
-        padding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 6),
-        child: Text(label,
-            style: const TextStyle(
-                fontSize: 12,
-                color: _green,
-                fontWeight: FontWeight.w600)),
-      );
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.icon,
-    required this.title,
-    required this.child,
-    required this.color,
-    required this.accentColor,
-  });
-  final IconData icon;
-  final String title;
-  final Widget child;
-  final Color color, accentColor;
-
-  @override
-  Widget build(BuildContext context) => _InkBox(
-        color: color,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          // Key Points
+          if (notes.keyPoints.isNotEmpty) ...[
             Row(
               children: [
-                _InkBox(
-                  width: 30,
-                  height: 30,
-                  radius: 8,
-                  color: Colors.white.withOpacity(.7),
-                  child: Icon(icon, size: 15, color: accentColor),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: ScribTheme.secondary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.lightbulb_outline_rounded,
+                      color: ScribTheme.secondary, size: 16),
                 ),
-                const SizedBox(width: 8),
-                Text(title.toUpperCase(),
+                const SizedBox(width: 10),
+                const Text('Key Points',
                     style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .6,
-                        color: accentColor)),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: ScribTheme.onSurface)),
               ],
             ),
-            const SizedBox(height: 14),
-            child,
+            const SizedBox(height: 12),
+            ...notes.keyPoints.asMap().entries.map(
+                  (e) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    decoration: BoxDecoration(
+                      color: ScribTheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: ScribTheme.surfaceVariant),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          margin: const EdgeInsets.only(right: 10, top: 1),
+                          decoration: BoxDecoration(
+                            color: ScribTheme.primary.withOpacity(0.14),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${e.key + 1}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: ScribTheme.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            _cleanInlineMarkdown(e.value),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: ScribTheme.onSurface,
+                              height: 1.55,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
           ],
-        ),
-      );
-}
 
-class _KeyPoint extends StatelessWidget {
-  const _KeyPoint({required this.index, required this.text});
-  final int index;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _InkBox(
-              width: 24,
-              height: 24,
-              radius: 20,
-              color: Colors.white.withOpacity(.6),
-              child: Center(
-                child: Text('$index',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _green)),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(text,
-                  style: const TextStyle(
-                      fontSize: 14, color: _ink, height: 1.5)),
-            ),
-          ],
-        ),
-      );
-}
-
-// ─── Tab 3: Flashcards — 3D flip + swipe + progress ──────────────────────────
-
-class _FlashcardsView extends StatefulWidget {
-  const _FlashcardsView({required this.notes});
-  final LectureNotes notes;
-
-  @override
-  State<_FlashcardsView> createState() => _FlashcardsViewState();
-}
-
-class _FlashcardsViewState extends State<_FlashcardsView>
-    with SingleTickerProviderStateMixin {
-  int _current = 0;
-  bool _showAnswer = false;
-  final Set<int> _reviewed = {};
-
-  // Flip animation
-  late final AnimationController _flipCtrl;
-  late final Animation<double> _frontAnim;
-  late final Animation<double> _backAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _flipCtrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 420));
-    _frontAnim = TweenSequence([
-      TweenSequenceItem(
-          tween: Tween(begin: 0.0, end: math.pi / 2)
-              .chain(CurveTween(curve: Curves.easeIn)),
-          weight: 50),
-      TweenSequenceItem(tween: ConstantTween(math.pi / 2), weight: 50),
-    ]).animate(_flipCtrl);
-    _backAnim = TweenSequence([
-      TweenSequenceItem(tween: ConstantTween(math.pi / 2), weight: 50),
-      TweenSequenceItem(
-          tween: Tween(begin: math.pi / 2, end: 0.0)
-              .chain(CurveTween(curve: Curves.easeOut)),
-          weight: 50),
-    ]).animate(_flipCtrl);
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
   }
+}
+
+// ─── Tab 3: Flashcards ────────────────────────────────────────────────────────
+
+class _FlashcardsTab extends StatefulWidget {
+  const _FlashcardsTab({required this.flashcards});
+  final List<Flashcard> flashcards;
+
+  @override
+  State<_FlashcardsTab> createState() => _FlashcardsTabState();
+}
+
+class _FlashcardsTabState extends State<_FlashcardsTab>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _flipController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 380),
+  );
+  late final Animation<double> _flipAnim =
+      Tween<double>(begin: 0, end: 1).animate(
+    CurvedAnimation(parent: _flipController, curve: Curves.easeInOut),
+  );
+
+  int _currentIndex = 0;
+  bool _isFlipped = false;
 
   @override
   void dispose() {
-    _flipCtrl.dispose();
+    _flipController.dispose();
     super.dispose();
   }
 
   void _flip() {
-    if (_flipCtrl.isAnimating) return;
-    if (_showAnswer) {
-      _flipCtrl.reverse().then((_) {
-        if (mounted) setState(() => _showAnswer = false);
-      });
+    if (_isFlipped) {
+      _flipController.reverse();
     } else {
-      _flipCtrl.forward().then((_) {
-        if (mounted) setState(() {
-          _showAnswer = true;
-          _reviewed.add(_current);
-        });
-      });
+      _flipController.forward();
     }
+    setState(() => _isFlipped = !_isFlipped);
   }
 
-  void _next() {
-    if (_current >= widget.notes.flashcards.length - 1) return;
-    _flipCtrl.reset();
+  void _goToCard(int index) {
+    if (index < 0 || index >= widget.flashcards.length) return;
+    _flipController.value = 0;
     setState(() {
-      _showAnswer = false;
-      _current++;
-    });
-  }
-
-  void _prev() {
-    if (_current <= 0) return;
-    _flipCtrl.reset();
-    setState(() {
-      _showAnswer = false;
-      _current--;
+      _currentIndex = index;
+      _isFlipped = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final cards = widget.notes.flashcards;
-    if (cards.isEmpty) {
-      return Center(
+    if (widget.flashcards.isEmpty) {
+      return const Center(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _InkBox(
-              width: 64,
-              height: 64,
-              radius: 18,
-              color: _purpleL,
-              child: const Icon(Icons.style_rounded,
-                  size: 28, color: _purple),
-            ),
-            const SizedBox(height: 14),
-            const Text('No flashcards generated.',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _ink)),
+            Icon(Icons.style_outlined,
+                color: ScribTheme.textSecondary, size: 48),
+            SizedBox(height: 16),
+            Text('No flashcards available',
+                style: TextStyle(color: ScribTheme.textSecondary)),
           ],
         ),
       );
     }
-    final card = cards[_current];
-    final pct = _reviewed.length / cards.length;
+
+    final card = widget.flashcards[_currentIndex];
+    final total = widget.flashcards.length;
 
     return Column(
       children: [
-        const SizedBox(height: 20),
-
-        // Progress row
+        // Progress bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
           child: Row(
             children: [
-              Text('${_current + 1} / ${cards.length}',
+              Text('${_currentIndex + 1} / $total',
                   style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _ink)),
+                      fontSize: 13, color: ScribTheme.textSecondary)),
               const SizedBox(width: 12),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: pct,
-                    minHeight: 5,
-                    backgroundColor: _purpleM.withOpacity(.35),
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(_purple),
+                    value: (_currentIndex + 1) / total,
+                    backgroundColor: ScribTheme.surfaceVariant,
+                    color: ScribTheme.primary,
+                    minHeight: 4,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Text('${_reviewed.length} reviewed',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _purple)),
             ],
           ),
         ),
-        const SizedBox(height: 20),
 
-        // Swipeable 3-D flip card
+        const SizedBox(height: 24),
+
+        // 3D Flip card
         Expanded(
           child: GestureDetector(
             onTap: _flip,
             onHorizontalDragEnd: (d) {
-              if ((d.primaryVelocity ?? 0) < -300) _next();
-              if ((d.primaryVelocity ?? 0) > 300) _prev();
+              if (d.primaryVelocity == null) return;
+              if (d.primaryVelocity! < -300) {
+                _goToCard(_currentIndex + 1);
+              } else if (d.primaryVelocity! > 300) {
+                _goToCard(_currentIndex - 1);
+              }
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: AnimatedBuilder(
-                animation: _flipCtrl,
+                animation: _flipAnim,
                 builder: (_, __) {
-                  final isFront = _flipCtrl.value < .5;
-                  final angle =
-                      isFront ? _frontAnim.value : _backAnim.value;
+                  final angle = _flipAnim.value * math.pi;
+                  final isShowingFront = angle < math.pi / 2;
+
                   return Transform(
                     alignment: Alignment.center,
                     transform: Matrix4.identity()
                       ..setEntry(3, 2, 0.001)
                       ..rotateY(angle),
-                    child: isFront
+                    child: isShowingFront
                         ? _CardFace(
-                            label: 'Question',
+                            label: 'Q',
+                            labelColor: ScribTheme.primary,
                             text: card.question,
-                            color: Colors.white,
-                            labelColor: _purple,
-                            hint: 'Tap to reveal answer · swipe to navigate',
+                            hint: 'Tap to reveal answer',
+                            bgColor: ScribTheme.surface,
+                            borderColor: ScribTheme.primary.withOpacity(0.3),
                           )
                         : Transform(
                             alignment: Alignment.center,
-                            transform: Matrix4.identity()
-                              ..rotateY(math.pi),
+                            transform: Matrix4.identity()..rotateY(math.pi),
                             child: _CardFace(
-                              label: 'Answer',
+                              label: 'A',
+                              labelColor: ScribTheme.secondary,
                               text: card.answer,
-                              color: _greenL,
-                              labelColor: _green,
-                              hint: 'Tap to flip back',
+                              hint: 'Tap to see question',
+                              bgColor: ScribTheme.secondary.withOpacity(0.06),
+                              borderColor:
+                                  ScribTheme.secondary.withOpacity(0.3),
                             ),
                           ),
                   );
@@ -762,40 +932,74 @@ class _FlashcardsViewState extends State<_FlashcardsView>
             ),
           ),
         ),
+
         const SizedBox(height: 24),
 
-        // Prev / Next buttons
+        // Dot indicators
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _InkBox(
-              width: 48,
-              height: 48,
-              radius: 14,
-              color: _current > 0 ? _purpleL : const Color(0xFFF2EAE4),
-              onTap: _current > 0 ? _prev : null,
-              child: Icon(Icons.arrow_back_rounded,
-                  size: 20,
-                  color: _current > 0 ? _purple : Colors.black26),
+          children: List.generate(
+            total,
+            (i) => AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: i == _currentIndex ? 20 : 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: i == _currentIndex
+                    ? ScribTheme.primary
+                    : ScribTheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-            const SizedBox(width: 16),
-            _InkBox(
-              width: 48,
-              height: 48,
-              radius: 14,
-              color: _current < cards.length - 1
-                  ? _purpleL
-                  : const Color(0xFFF2EAE4),
-              onTap: _current < cards.length - 1 ? _next : null,
-              child: Icon(Icons.arrow_forward_rounded,
-                  size: 20,
-                  color: _current < cards.length - 1
-                      ? _purple
-                      : Colors.black26),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 32),
+
+        const SizedBox(height: 20),
+
+        // Navigation buttons
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _currentIndex > 0
+                      ? () => _goToCard(_currentIndex - 1)
+                      : null,
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      size: 14),
+                  label: const Text('Previous'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ScribTheme.textSecondary,
+                    side: const BorderSide(color: ScribTheme.surfaceVariant),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _currentIndex < total - 1
+                      ? () => _goToCard(_currentIndex + 1)
+                      : null,
+                  icon: const Icon(Icons.arrow_forward_ios_rounded,
+                      size: 14),
+                  label: const Text('Next'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ScribTheme.primary,
+                    disabledBackgroundColor: ScribTheme.surfaceVariant,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -804,250 +1008,400 @@ class _FlashcardsViewState extends State<_FlashcardsView>
 class _CardFace extends StatelessWidget {
   const _CardFace({
     required this.label,
-    required this.text,
-    required this.color,
     required this.labelColor,
+    required this.text,
     required this.hint,
+    required this.bgColor,
+    required this.borderColor,
   });
-  final String label, text, hint;
-  final Color color, labelColor;
+
+  final String label;
+  final Color labelColor;
+  final String text;
+  final String hint;
+  final Color bgColor;
+  final Color borderColor;
 
   @override
-  Widget build(BuildContext context) => _InkBox(
-        color: color,
-        padding: const EdgeInsets.all(28),
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _InkBox(
-              radius: 20,
-              color: Colors.white.withOpacity(.7),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 4),
-              child: Text(label.toUpperCase(),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: labelColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: labelColor.withOpacity(0.3)),
+              ),
+              child: Text(label,
                   style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .6,
-                      color: labelColor)),
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: labelColor,
+                      letterSpacing: 1)),
             ),
-            const SizedBox(height: 24),
+            const Spacer(),
             Text(
               text,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: _ink,
-                  height: 1.5),
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: ScribTheme.onSurface,
+                height: 1.5,
+              ),
             ),
-            const SizedBox(height: 24),
-            Text(hint,
-                style: const TextStyle(
-                    fontSize: 12, color: Colors.black38)),
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.touch_app_outlined,
+                    size: 13, color: ScribTheme.textSecondary),
+                const SizedBox(width: 4),
+                Text(hint,
+                    style: const TextStyle(
+                        fontSize: 12, color: ScribTheme.textSecondary)),
+              ],
+            ),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
-// ─── Tab 4: Transcript — search + highlight + scroll-to-match ────────────────
+// ─── Tab 4: Transcript ────────────────────────────────────────────────────────
 
-class _TranscriptView extends StatefulWidget {
-  const _TranscriptView({required this.transcript});
+class _TranscriptTab extends StatefulWidget {
+  const _TranscriptTab({required this.transcript});
   final String? transcript;
 
   @override
-  State<_TranscriptView> createState() => _TranscriptViewState();
+  State<_TranscriptTab> createState() => _TranscriptTabState();
 }
 
-class _TranscriptViewState extends State<_TranscriptView> {
-  final _searchCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
-  final _textKey    = GlobalKey();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    _scrollCtrl.dispose();
-    super.dispose();
-  }
-
-  // Scroll to the approximate position of the first match.
-  void _scrollToFirstMatch(String text, String query) {
-    if (query.isEmpty) return;
-    final idx = text.toLowerCase().indexOf(query.toLowerCase());
-    if (idx < 0) return;
-    final charFraction = idx / text.length;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final maxScroll = _scrollCtrl.position.maxScrollExtent;
-      _scrollCtrl.animateTo(
-        maxScroll * charFraction,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    });
-  }
+class _TranscriptTabState extends State<_TranscriptTab> {
+  bool _copied = false;
 
   @override
   Widget build(BuildContext context) {
-    final raw = widget.transcript ?? '';
-    if (raw.isEmpty) {
-      return Center(
+    final text = widget.transcript;
+
+    if (text == null || text.trim().isEmpty) {
+      return const Center(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _InkBox(
-              width: 64,
-              height: 64,
-              radius: 18,
-              color: _amberL,
-              child: const Icon(Icons.transcript, size: 28, color: _amber),
-            ),
-            const SizedBox(height: 14),
-            const Text('Transcript not available.',
+            Icon(Icons.text_snippet_outlined,
+                color: ScribTheme.textSecondary, size: 48),
+            SizedBox(height: 16),
+            Text('Transcript not available',
                 style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _ink)),
+                    fontSize: 15, color: ScribTheme.textSecondary)),
+            SizedBox(height: 8),
+            Text('Process a recording to see the transcript.',
+                style:
+                    TextStyle(fontSize: 13, color: ScribTheme.textSecondary)),
           ],
         ),
       );
     }
 
-    final spans = _buildSpans(raw, _query);
-    final matchCount = _query.isEmpty
-        ? 0
-        : RegExp(RegExp.escape(_query), caseSensitive: false)
-            .allMatches(raw)
-            .length;
+    final wordCount = text.split(RegExp(r'\s+')).length;
 
     return Column(
       children: [
-        // Search bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: _InkBox(
-            color: Colors.white,
-            radius: 14,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.search_rounded,
-                    size: 18, color: _purple),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: _ink),
-                    decoration: const InputDecoration(
-                      hintText: 'Search transcript…',
-                      hintStyle: TextStyle(
-                          fontSize: 14, color: Colors.black38),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onChanged: (v) {
-                      setState(() => _query = v.trim());
-                      _scrollToFirstMatch(raw, v.trim());
-                    },
-                  ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+          decoration: const BoxDecoration(
+            border: Border(
+                bottom:
+                    BorderSide(color: ScribTheme.surfaceVariant, width: 1)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.text_fields_rounded,
+                  color: ScribTheme.textSecondary, size: 16),
+              const SizedBox(width: 8),
+              Text('$wordCount words',
+                  style: const TextStyle(
+                      fontSize: 13, color: ScribTheme.textSecondary)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: text));
+                  setState(() => _copied = true);
+                  await Future.delayed(const Duration(seconds: 2));
+                  if (mounted) setState(() => _copied = false);
+                },
+                icon: Icon(
+                  _copied ? Icons.check_rounded : Icons.copy_outlined,
+                  size: 15,
+                  color: _copied ? ScribTheme.secondary : ScribTheme.primary,
                 ),
-                if (_query.isNotEmpty) ...[
-                  Text('$matchCount',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: _purple)),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: () {
-                      _searchCtrl.clear();
-                      setState(() => _query = '');
-                    },
-                    child: const Icon(Icons.close_rounded,
-                        size: 16, color: Colors.black38),
-                  ),
-                ],
-              ],
-            ),
+                label: Text(
+                  _copied ? 'Copied!' : 'Copy',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: _copied
+                          ? ScribTheme.secondary
+                          : ScribTheme.primary),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 10),
-
-        // Transcript body
         Expanded(
-          child: SingleChildScrollView(
-            controller: _scrollCtrl,
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
-            child: RichText(
-              key: _textKey,
-              text: TextSpan(children: spans),
+          child: SelectionArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: ScribTheme.onSurface,
+                  height: 1.7,
+                ),
+              ),
             ),
           ),
         ),
       ],
     );
   }
+}
 
-  List<TextSpan> _buildSpans(String text, String query) {
-    if (query.isEmpty) {
-      return [
-        TextSpan(
-          text: text,
-          style: const TextStyle(
-              fontSize: 14,
-              color: _ink,
-              height: 1.75),
+// ─── Tab 5: Photos ────────────────────────────────────────────────────────────
+
+class _PhotosTab extends StatelessWidget {
+  const _PhotosTab({
+    required this.lecture,
+    required this.onTakePhoto,
+    required this.onPickGallery,
+  });
+
+  final Lecture lecture;
+  final VoidCallback onTakePhoto;
+  final VoidCallback onPickGallery;
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = lecture.photoPaths;
+
+    return Column(
+      children: [
+        // Action buttons
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onTakePhoto,
+                  icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                  label: const Text('Take Photo'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ScribTheme.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickGallery,
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: const Text('Gallery'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ScribTheme.primary,
+                    side: BorderSide(
+                        color: ScribTheme.primary.withOpacity(0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ];
-    }
 
-    final spans = <TextSpan>[];
-    final lower = text.toLowerCase();
-    final q = query.toLowerCase();
-    int start = 0;
+        if (photos.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: ScribTheme.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add_photo_alternate_outlined,
+                        size: 38, color: ScribTheme.primary),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('No photos yet',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: ScribTheme.onSurface)),
+                  const SizedBox(height: 6),
+                  const Text('Capture whiteboard or slides\nfrom this lecture',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: ScribTheme.textSecondary,
+                          height: 1.5)),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: photos.length,
+              itemBuilder: (context, i) {
+                return _PhotoTile(
+                  path: photos[i],
+                  onDelete: () => context
+                      .read<LectureProvider>()
+                      .deletePhoto(lecture.id, photos[i]),
+                  onTap: () => _viewPhoto(context, photos, i),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
 
-    while (true) {
-      final idx = lower.indexOf(q, start);
-      if (idx < 0) {
-        spans.add(TextSpan(
-          text: text.substring(start),
-          style: const TextStyle(
-              fontSize: 14, color: _ink, height: 1.75),
-        ));
-        break;
-      }
-      if (idx > start) {
-        spans.add(TextSpan(
-          text: text.substring(start, idx),
-          style: const TextStyle(
-              fontSize: 14, color: _ink, height: 1.75),
-        ));
-      }
-      spans.add(TextSpan(
-        text: text.substring(idx, idx + query.length),
-        style: const TextStyle(
-          fontSize: 14,
-          color: _ink,
-          height: 1.75,
-          fontWeight: FontWeight.w700,
-          backgroundColor: Color(0xFFCECBF6),
-        ),
-      ));
-      start = idx + query.length;
-    }
-    return spans;
+  void _viewPhoto(BuildContext context, List<String> photos, int index) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _PhotoViewScreen(photos: photos, initialIndex: index),
+      ),
+    );
   }
 }
 
-// ─── Extension helpers ────────────────────────────────────────────────────────
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile(
+      {required this.path, required this.onDelete, required this.onTap});
+  final String path;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
 
-extension on Widget {
-  Widget withPadding(EdgeInsetsGeometry p) => Padding(padding: p, child: this);
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              File(path),
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: ScribTheme.surface,
+                child: const Icon(Icons.broken_image_outlined,
+                    color: ScribTheme.textSecondary),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: GestureDetector(
+              onTap: onDelete,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoViewScreen extends StatefulWidget {
+  const _PhotoViewScreen(
+      {required this.photos, required this.initialIndex});
+  final List<String> photos;
+  final int initialIndex;
+
+  @override
+  State<_PhotoViewScreen> createState() => _PhotoViewScreenState();
+}
+
+class _PhotoViewScreenState extends State<_PhotoViewScreen> {
+  late final PageController _pageController =
+      PageController(initialPage: widget.initialIndex);
+  late int _current = widget.initialIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_current + 1} / ${widget.photos.length}',
+            style: const TextStyle(color: Colors.white)),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.photos.length,
+        onPageChanged: (i) => setState(() => _current = i),
+        itemBuilder: (_, i) => InteractiveViewer(
+          child: Center(
+            child: Image.file(File(widget.photos[i])),
+          ),
+        ),
+      ),
+    );
+  }
 }

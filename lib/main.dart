@@ -2,12 +2,21 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme.dart';
+import 'core/supabase_config.dart';
 import 'providers/lecture_provider.dart';
-import 'screens/home_screen.dart';
+import 'providers/theme_provider.dart';
+import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    anonKey: SupabaseConfig.anonKey,
+  );
+  await NotificationService.init();
   runApp(const ScribApp());
 }
 
@@ -16,13 +25,20 @@ class ScribApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => LectureProvider(),
-      child: MaterialApp(
-        title: 'Scrib',
-        debugShowCheckedModeBanner: false,
-        theme: ScribTheme.dark,
-        home: const HomeScreen(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LectureProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) => MaterialApp(
+          title: 'Scrib',
+          debugShowCheckedModeBanner: false,
+          theme: ScribTheme.light,
+          darkTheme: ScribTheme.dark,
+          themeMode: themeProvider.themeMode,
+          home: const SplashScreen(),
+        ),
       ),
     );
   }

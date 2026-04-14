@@ -1,14 +1,12 @@
 // lib/providers/lecture_provider.dart
-//
-// Central state manager for all lectures in the app.
-// Persists lectures to SharedPreferences so they survive app restarts.
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/lecture.dart';
 import '../services/audio_service.dart';
 import '../services/transcription_service.dart';
 import '../services/ai_notes_service.dart';
+import '../services/notification_service.dart';
 import 'package:uuid/uuid.dart';
 
 class LectureProvider extends ChangeNotifier {
@@ -16,6 +14,9 @@ class LectureProvider extends ChangeNotifier {
   final _transcriptionService = TranscriptionService();
   final _aiNotesService = AiNotesService();
   final _uuid = const Uuid();
+
+  SupabaseClient get _db => Supabase.instance.client;
+  String? get _userId => _db.auth.currentUser?.id;
 
   List<Lecture> _lectures = [];
   List<Lecture> get lectures => List.unmodifiable(_lectures);
@@ -28,23 +29,38 @@ class LectureProvider extends ChangeNotifier {
   Stream<Duration> get recordingDurationStream =>
       _audioService.durationStream;
 
-  // ─── Persistence ──────────────────────────────────────────────────────────
-
-  static const _storageKey = 'scrib_lectures';
+  // ─── Load from Supabase ───────────────────────────────────────────────────
 
   Future<void> loadLectures() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getStringList(_storageKey) ?? [];
-    _lectures = stored.map(Lecture.fromJsonString).toList();
-    notifyListeners();
+    try {
+      final uid = _userId;
+      if (uid == null) return;
+
+      final response = await _db
+          .from('lectures')
+          .select()
+          .eq('user_id', uid)
+          .order('recorded_at', ascending: false);
+
+      _lectures = (response as List)
+          .map((json) => Lecture.fromSupabaseJson(json as Map<String, dynamic>))
+          .toList();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading lectures: $e');
+    }
   }
 
-  Future<void> _saveLectures() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _storageKey,
-      _lectures.map((l) => l.toJsonString()).toList(),
-    );
+  // ─── Upsert single lecture to Supabase ───────────────────────────────────
+
+  Future<void> _upsertLecture(Lecture lecture) async {
+    try {
+      final uid = _userId;
+      if (uid == null) return;
+      await _db.from('lectures').upsert(lecture.toSupabaseJson(uid));
+    } catch (e) {
+      debugPrint('Error saving lecture: $e');
+    }
   }
 
   // ─── Recording lifecycle ──────────────────────────────────────────────────
@@ -54,8 +70,7 @@ class LectureProvider extends ChangeNotifier {
     String? subject,
   }) async {
     final path = await _audioService.startRecording();
-    if (path == null) return; // permission denied
-
+    if (path == null) return;
     _isRecording = true;
     notifyListeners();
   }
@@ -68,8 +83,7 @@ class LectureProvider extends ChangeNotifier {
     await _audioService.resumeRecording();
   }
 
-  /// Stops recording, creates the lecture object, and kicks off processing.
-  Future<void> stopRecordingAndProcess({
+  Future<String?> stopRecordingAndProcess({
     required String title,
     String? subject,
   }) async {
@@ -77,7 +91,7 @@ class LectureProvider extends ChangeNotifier {
     _isRecording = false;
     notifyListeners();
 
-    if (result == null) return;
+    if (result == null) return null;
 
     final lecture = Lecture(
       id: _uuid.v4(),
@@ -90,18 +104,19 @@ class LectureProvider extends ChangeNotifier {
     );
 
     _lectures.insert(0, lecture);
-    await _saveLectures();
     notifyListeners();
+    await _upsertLecture(lecture);
 
-    // Process in the background — UI will react to status changes
-    await _processLecture(lecture);
+    // Fire and forget
+    _processLecture(lecture);
+
+    return lecture.id;
   }
 
   // ─── Processing pipeline ──────────────────────────────────────────────────
 
   Future<void> _processLecture(Lecture lecture) async {
     try {
-      // Step 1: Upload & transcribe
       _updateLecture(lecture.copyWith(status: LectureStatus.uploading));
 
       final transcript = await _transcriptionService.transcribeAudio(
@@ -120,18 +135,20 @@ class LectureProvider extends ChangeNotifier {
         transcript: transcript,
       ));
 
-      // Step 2: Generate notes
       final notes = await _aiNotesService.generateNotes(transcript);
 
       _updateLecture(lecture.copyWith(
         status: LectureStatus.completed,
+        transcript: transcript,
         notes: notes,
       ));
+      await NotificationService.showNotesReady(lecture.title);
     } catch (e) {
       _updateLecture(lecture.copyWith(
         status: LectureStatus.failed,
         errorMessage: e.toString(),
       ));
+      await NotificationService.showProcessingFailed(lecture.title);
     }
   }
 
@@ -139,15 +156,41 @@ class LectureProvider extends ChangeNotifier {
     final idx = _lectures.indexWhere((l) => l.id == updated.id);
     if (idx != -1) {
       _lectures[idx] = updated;
-      _saveLectures();
       notifyListeners();
+      _upsertLecture(updated);
     }
+  }
+
+  Future<void> retryLecture(String id) async {
+    final idx = _lectures.indexWhere((l) => l.id == id);
+    if (idx == -1) return;
+    await _processLecture(_lectures[idx]);
   }
 
   Future<void> deleteLecture(String id) async {
     _lectures.removeWhere((l) => l.id == id);
-    await _saveLectures();
     notifyListeners();
+    try {
+      await _db.from('lectures').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Error deleting lecture: $e');
+    }
+  }
+
+  Future<void> addPhoto(String lectureId, String photoPath) async {
+    final idx = _lectures.indexWhere((l) => l.id == lectureId);
+    if (idx == -1) return;
+    final updated = List<String>.from(_lectures[idx].photoPaths)
+      ..add(photoPath);
+    _updateLecture(_lectures[idx].copyWith(photoPaths: updated));
+  }
+
+  Future<void> deletePhoto(String lectureId, String photoPath) async {
+    final idx = _lectures.indexWhere((l) => l.id == lectureId);
+    if (idx == -1) return;
+    final updated = List<String>.from(_lectures[idx].photoPaths)
+      ..remove(photoPath);
+    _updateLecture(_lectures[idx].copyWith(photoPaths: updated));
   }
 
   @override

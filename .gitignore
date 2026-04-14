@@ -47,3 +47,7 @@ app.*.map.json
 # Backend local secrets/temp files
 backend/.env
 backend/uploads/
+python_backend/.env
+
+# Personal commands folder (managed as a separate repo)
+commands/

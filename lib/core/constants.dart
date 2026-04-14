@@ -4,7 +4,7 @@ class AppConstants {
   // Override with --dart-define=BACKEND_BASE_URL=http://<your-ip>:8787
   static const String backendBaseUrl = String.fromEnvironment(
     'BACKEND_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8787',
+    defaultValue: 'https://scrib-backend.fly.dev',
   );
 
     // ─── Backend Endpoints ────────────────────────────────────────────────────

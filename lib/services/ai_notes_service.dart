@@ -35,10 +35,50 @@ class AiNotesService {
           'AI notes generation failed (${response.statusCode}): ${response.body}');
     }
 
-    final notesJson = jsonDecode(response.body) as Map<String, dynamic>;
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+
+    // New Python backend response: { success, payload: { title, summary, key_points, flashcards, takeaways, topics } }
+    final payload = decoded.containsKey('payload')
+        ? decoded['payload'] as Map<String, dynamic>
+        : decoded;
+
+    // Map Python backend fields to LectureNotes model
+    final notesJson = {
+      'summary': payload['summary'] ?? payload['overview'] ?? '',
+      'fullNotes': _buildFullNotes(payload),
+      'keyPoints': _parseKeyPoints(payload['key_points'] as String? ?? ''),
+      'flashcards': payload['flashcards'] ?? [],
+      'topics': payload['topics'] ?? [],
+    };
+
     return LectureNotes.fromJson(notesJson);
   }
 
   // ─── Generate a quiz (TODO for Member 3) ─────────────────────────────────
   // Future<List<QuizQuestion>> generateQuiz(LectureNotes notes) async { ... }
+
+  /// Builds a markdown-formatted full notes string from the payload fields.
+  /// Intentionally excludes the summary — that lives in the Summary tab.
+  /// Notes tab = detailed study content: key points + takeaways.
+  String _buildFullNotes(Map<String, dynamic> payload) {
+    final buffer = StringBuffer();
+    final title = payload['title'] as String? ?? '';
+    final keyPoints = payload['key_points'] as String? ?? '';
+    final takeaways = payload['takeaways'] as String? ?? '';
+
+    if (title.isNotEmpty) buffer.writeln('# $title\n');
+    if (keyPoints.isNotEmpty) buffer.writeln('## Key Points\n$keyPoints\n');
+    if (takeaways.isNotEmpty) buffer.writeln('## Key Takeaways\n$takeaways\n');
+
+    return buffer.toString();
+  }
+
+  /// Parses a numbered string list into a List<String>.
+  List<String> _parseKeyPoints(String raw) {
+    return raw
+        .split('\n')
+        .map((l) => l.replaceAll(RegExp(r'^\d+\.\s*'), '').trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+  }
 }

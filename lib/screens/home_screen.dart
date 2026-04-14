@@ -1,72 +1,16 @@
 // lib/screens/home_screen.dart
-//
-// 
-//   • Ink-bordered cards (_InkBox)
-//   • Animated waveform bars (live recording)
-//   • Animated ring/donut (notes ready)
-//   • Count-up number animation
-//   • Heatmap cells revealed on load
-//   • Shimmer/indeterminate progress bars
-//
 
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../models/lecture.dart';
 import '../providers/lecture_provider.dart';
 import 'recording_screen.dart';
 import 'notes_screen.dart';
-
-// ─── Color constants ──────────────────────────────────────────────────────────
-const _ink     = Color(0xFF1A1228);
-const _purple  = Color(0xFF6C63E9);
-const _purpleL = Color(0xFFEEEDFE);
-const _purpleM = Color(0xFFCECBF6);
-const _green   = Color(0xFF1D9E75);
-const _greenL  = Color(0xFFE1F5EE);
-const _amber   = Color(0xFFBA7517);
-const _amberL  = Color(0xFFFAEEDA);
-const _pink    = Color(0xFF993556);
-const _pinkL   = Color(0xFFFBEAF0);
-const _pinkM   = Color(0xFFED93B1);
-const _cream   = Color(0xFFF9F4EE);
-const _red     = Color(0xFFE24B4A);
-
-// ─── Shared ink-bordered card container ──────────────────────────────────────
-
-class _InkBox extends StatelessWidget {
-  const _InkBox({
-    required this.child,
-    this.color = Colors.white,
-    this.width,
-    this.height,
-    this.radius = 20.0,
-    this.padding,
-  });
-  final Widget child;
-  final Color color;
-  final double? width, height;
-  final double radius;
-  final EdgeInsetsGeometry? padding;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: width,
-        height: height,
-        padding: padding,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: _ink, width: 2),
-        ),
-        child: child,
-      );
-}
-
-
-// ─── Home Screen ──────────────────────────────────────────────────────────────
+import 'processing_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -76,941 +20,553 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  String _userName = '';
+  String _searchQuery = '';
+  String? _selectedSubject;
+  final _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<LectureProvider>().loadLectures();
     });
+    _loadUser();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: _cream,
-        body: Consumer<LectureProvider>(
-          builder: (context, provider, _) {
-            final lectures = provider.lectures;
-            return CustomScrollView(
-              slivers: [
-                _SliverAppBar(),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                  sliver: SliverToBoxAdapter(
-                    child: lectures.isEmpty
-                        ? const _EmptyState()
-                        : _Dashboard(lectures: lectures),
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('user_name') ?? '';
+    if (mounted) setState(() => _userName = name.split(' ').first);
+  }
+
+  String get _greeting {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  List<Lecture> _filtered(List<Lecture> lectures) {
+    return lectures.where((l) {
+      final q = _searchQuery.toLowerCase();
+      final matchesSearch = q.isEmpty ||
+          l.title.toLowerCase().contains(q) ||
+          (l.subject?.toLowerCase().contains(q) ?? false);
+      final matchesSubject =
+          _selectedSubject == null || l.subject == _selectedSubject;
+      return matchesSearch && matchesSubject;
+    }).toList();
+  }
+
+  List<String> _subjects(List<Lecture> lectures) =>
+      lectures.map((l) => l.subject).whereType<String>().toSet().toList();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: ScribTheme.background,
+      body: Consumer<LectureProvider>(
+        builder: (context, provider, _) {
+          final lectures = provider.lectures;
+          final filtered = _filtered(lectures);
+          final subjects = _subjects(lectures);
+
+          return CustomScrollView(
+            slivers: [
+              // ── Header ──────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: _Header(
+                  userName: _userName,
+                  greeting: _greeting,
+                ),
+              ),
+
+              // ── Search ───────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  child: _SearchBar(
+                    controller: _searchController,
+                    onChanged: (q) => setState(() => _searchQuery = q),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const RecordingScreen()),
-          ),
-          backgroundColor: _ink,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: const StadiumBorder(),
-          icon: const Icon(Icons.mic_none_rounded, size: 20),
-          label: const Text('Record',
-              style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: .2)),
-        ),
-      );
+              ),
+
+              // ── Stats ─────────────────────────────────────────────────────
+              if (lectures.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _StatsRow(lectures: lectures),
+                ),
+
+              // ── Subject chips ─────────────────────────────────────────────
+              if (subjects.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _SubjectChips(
+                    subjects: subjects,
+                    selected: _selectedSubject,
+                    onSelect: (s) => setState(() => _selectedSubject = s),
+                  ),
+                ),
+
+              // ── Section title ─────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _searchQuery.isNotEmpty || _selectedSubject != null
+                            ? '${filtered.length} result${filtered.length == 1 ? '' : 's'}'
+                            : 'Your Lectures',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: ScribTheme.onSurface,
+                        ),
+                      ),
+                      if (_selectedSubject != null)
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _selectedSubject = null),
+                          child: const Text('Clear',
+                              style: TextStyle(
+                                  fontSize: 13, color: ScribTheme.primary)),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── List ──────────────────────────────────────────────────────
+              if (lectures.isEmpty)
+                SliverFillRemaining(
+                  child: _EmptyState(
+                      onRecord: () => _startRecording(context)),
+                )
+              else if (filtered.isEmpty)
+                SliverFillRemaining(
+                  child: _NoResultsState(
+                    query: _searchQuery,
+                    onClear: () => setState(() {
+                      _searchQuery = '';
+                      _selectedSubject = null;
+                      _searchController.clear();
+                    }),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final lecture = filtered[i];
+                        return Dismissible(
+                          key: ValueKey(lecture.id),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 24),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: ScribTheme.error,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(Icons.delete_outline_rounded,
+                                color: Colors.white, size: 24),
+                          ),
+                          onDismissed: (_) => context
+                              .read<LectureProvider>()
+                              .deleteLecture(lecture.id),
+                          child: _LectureCard(lecture: lecture),
+                        );
+                      },
+                      childCount: filtered.length,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _startRecording(context),
+        backgroundColor: ScribTheme.primary,
+        icon: const Icon(Icons.mic_rounded, color: Colors.white),
+        label: const Text('Record Lecture',
+            style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        elevation: 4,
+      ),
+    );
+  }
+
+  void _startRecording(BuildContext context) {
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const RecordingScreen()));
+  }
 }
 
-// ─── Sliver App Bar ───────────────────────────────────────────────────────────
+// ─── Header ───────────────────────────────────────────────────────────────────
 
-class _SliverAppBar extends StatelessWidget {
+class _Header extends StatelessWidget {
+  const _Header({required this.userName, required this.greeting});
+  final String userName;
+  final String greeting;
+
   @override
-  Widget build(BuildContext context) => SliverToBoxAdapter(
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 12, 20),
-            child: Row(
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          20, MediaQuery.of(context).padding.top + 24, 20, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomCenter,
+          colors: [
+            ScribTheme.primary.withValues(alpha: 0.18),
+            ScribTheme.secondary.withValues(alpha: 0.04),
+            ScribTheme.background,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _InkBox(
-                  width: 36,
-                  height: 36,
-                  radius: 10,
-                  color: _purpleL,
-                  child: const Center(
-                    child: Text('✏️', style: TextStyle(fontSize: 18)),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: ScribTheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.wb_sunny_rounded,
+                              color: ScribTheme.primary, size: 12),
+                          const SizedBox(width: 5),
+                          Text(
+                            greeting,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: ScribTheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  userName.isNotEmpty ? 'Hey, $userName!' : 'Welcome back!',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: ScribTheme.onSurface,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(width: 10),
-                const Text('Scrib',
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: _ink,
-                        letterSpacing: -1)),
-                const Spacer(),
-                _InkBox(
-                  width: 36,
-                  height: 36,
-                  radius: 10,
-                  color: Colors.white,
-                  child: const Icon(Icons.tune_rounded, size: 18, color: _ink),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat('EEEE, MMMM d').format(DateTime.now()),
+                  style: const TextStyle(
+                      fontSize: 13, color: ScribTheme.textSecondary),
                 ),
               ],
             ),
           ),
-        ),
-      );
+          const SizedBox(width: 16),
+          // Avatar — taps to open profile
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            child: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [ScribTheme.primary, Color(0xFF8B7FF5)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: ScribTheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  userName.isNotEmpty ? userName[0].toUpperCase() : 'S',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+// ─── Search Bar ───────────────────────────────────────────────────────────────
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+class _SearchBar extends StatelessWidget {
+  const _SearchBar({required this.controller, required this.onChanged});
+  final TextEditingController controller;
+  final void Function(String) onChanged;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 420,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _InkBox(
-                width: 80,
-                height: 80,
-                radius: 24,
-                color: _purpleL,
-                child: const Icon(Icons.mic_none_rounded,
-                    size: 36, color: _purple),
-              ),
-              const SizedBox(height: 20),
-              const Text('No lectures yet',
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: _ink)),
-              const SizedBox(height: 8),
-              const Text('Tap below to record your first lecture',
-                  style: TextStyle(fontSize: 13, color: _purple)),
-            ],
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: ScribTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: ScribTheme.surfaceVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: const TextStyle(color: ScribTheme.onSurface, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search lectures or subjects...',
+          hintStyle:
+              const TextStyle(color: ScribTheme.textSecondary, fontSize: 14),
+          prefixIcon: const Icon(Icons.search_rounded,
+              color: ScribTheme.textSecondary, size: 20),
+          suffixIcon: controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded,
+                      color: ScribTheme.textSecondary, size: 18),
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
-      );
+      ),
+    );
+  }
 }
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
+// ─── Stats Row ────────────────────────────────────────────────────────────────
 
-class _Dashboard extends StatelessWidget {
-  const _Dashboard({required this.lectures});
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.lectures});
   final List<Lecture> lectures;
 
   @override
   Widget build(BuildContext context) {
     final completed =
         lectures.where((l) => l.status == LectureStatus.completed).length;
-    final totalMins =
-        lectures.fold(Duration.zero, (a, l) => a + l.duration).inMinutes;
     final processing = lectures
         .where((l) =>
-            l.status != LectureStatus.completed &&
-            l.status != LectureStatus.failed)
-        .toList();
-    final live = processing.isNotEmpty ? processing.first : null;
+            l.status == LectureStatus.uploading ||
+            l.status == LectureStatus.transcribing ||
+            l.status == LectureStatus.generatingNotes)
+        .length;
+    final totalMins =
+        lectures.fold(Duration.zero, (a, l) => a + l.duration).inMinutes;
+    final timeLabel = totalMins >= 60
+        ? '${totalMins ~/ 60}h ${totalMins % 60}m'
+        : '${totalMins}m';
 
-    return Column(
-      children: [
-        // Row 1 ─ count-up stat + live recording (or hours)
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _CountUpCard(
-                  label: 'Total lectures',
-                  value: lectures.length,
-                  color: _purpleL,
-                  accentColor: _purple,
-                  chips: const ['Biology', 'Physics', 'Maths'],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: live != null
-                    ? _LiveRecordingCard(lecture: live)
-                    : _HoursCard(totalMins: totalMins),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Row(
+        children: [
+          _StatCard(
+            label: 'Total',
+            value: '${lectures.length}',
+            sublabel: 'lectures',
+            icon: Icons.library_books_outlined,
+            color: ScribTheme.primary,
           ),
-        ),
-        const SizedBox(height: 12),
-
-        // Row 2 ─ ring progress + hours
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _RingProgressCard(
-                    ready: completed, total: lectures.length),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  children: [
-                    _HoursCard(totalMins: totalMins),
-                    if (processing.length > 1) ...[
-                      const SizedBox(height: 12),
-                      _ProcessingCard(
-                          lectures: processing.skip(1).toList()),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+          const SizedBox(width: 10),
+          _StatCard(
+            label: 'Ready',
+            value: '$completed',
+            sublabel: 'notes',
+            icon: Icons.check_circle_outline_rounded,
+            color: ScribTheme.secondary,
           ),
-        ),
-        const SizedBox(height: 12),
-
-        // Row 3 ─ activity heatmap
-        _HeatmapCard(lectures: lectures),
-        const SizedBox(height: 12),
-
-        // Row 4 ─ completed lecture list
-        ...lectures
-            .where((l) => l.status == LectureStatus.completed)
-            .take(4)
-            .map((l) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _LectureCard(lecture: l),
-                )),
-      ],
+          const SizedBox(width: 10),
+          if (processing > 0)
+            _StatCard(
+              label: 'Processing',
+              value: '$processing',
+              sublabel: 'active',
+              icon: Icons.sync_rounded,
+              color: const Color(0xFFF5A623),
+            )
+          else
+            _StatCard(
+              label: 'Recorded',
+              value: timeLabel,
+              sublabel: 'total',
+              icon: Icons.timer_outlined,
+              color: const Color(0xFFF5A623),
+            ),
+        ],
+      ),
     );
   }
 }
 
-// ─── Count-Up Card ────────────────────────────────────────────────────────────
-
-class _CountUpCard extends StatefulWidget {
-  const _CountUpCard({
+class _StatCard extends StatelessWidget {
+  const _StatCard({
     required this.label,
     required this.value,
+    required this.sublabel,
+    required this.icon,
     required this.color,
-    required this.accentColor,
-    required this.chips,
   });
-  final String label;
-  final int value;
-  final Color color, accentColor;
-  final List<String> chips;
-
-  @override
-  State<_CountUpCard> createState() => _CountUpCardState();
-}
-
-class _CountUpCardState extends State<_CountUpCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 900));
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _ctrl.forward();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _InkBox(
-        color: widget.color,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.label.toUpperCase(),
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .6,
-                    color: widget.accentColor)),
-            const SizedBox(height: 8),
-            AnimatedBuilder(
-              animation: _anim,
-              builder: (_, __) => Text(
-                '${(_anim.value * widget.value).round()}',
-                style: const TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w800,
-                    color: _ink,
-                    height: 1,
-                    letterSpacing: -2),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text('this semester',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: widget.accentColor.withOpacity(.75))),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: widget.chips
-                  .map((c) => _InkBox(
-                        color: Colors.white.withOpacity(.6),
-                        radius: 20,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 3),
-                        child: Text(c,
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: widget.accentColor)),
-                      ))
-                  .toList(),
-            ),
-          ],
-        ),
-      );
-}
-
-// ─── Live Recording Card ──────────────────────────────────────────────────────
-
-class _LiveRecordingCard extends StatefulWidget {
-  const _LiveRecordingCard({required this.lecture});
-  final Lecture lecture;
-
-  @override
-  State<_LiveRecordingCard> createState() => _LiveRecordingCardState();
-}
-
-class _LiveRecordingCardState extends State<_LiveRecordingCard>
-    with TickerProviderStateMixin {
-  late final AnimationController _blink;
-  late final List<AnimationController> _bars;
-  final _rng = math.Random();
-
-  @override
-  void initState() {
-    super.initState();
-    _blink = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
-    _bars = List.generate(12, (_) {
-      return AnimationController(
-        vsync: this,
-        duration:
-            Duration(milliseconds: 600 + _rng.nextInt(700)),
-      )..repeat(reverse: true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _blink.dispose();
-    for (final b in _bars) b.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _InkBox(
-        color: Colors.white,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with blinking dot
-            Row(
-              children: [
-                FadeTransition(
-                  opacity: _blink,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                        color: _red, shape: BoxShape.circle),
-                  ),
-                ),
-                const SizedBox(width: 7),
-                const Text('LIVE RECORDING',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .6,
-                        color: _ink)),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(widget.lecture.title,
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _ink),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 14),
-
-            // Animated waveform bars
-            SizedBox(
-              height: 44,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: List.generate(
-                  12,
-                  (i) => Expanded(
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 1.5),
-                      child: AnimatedBuilder(
-                        animation: _bars[i],
-                        builder: (_, __) {
-                          final h = 8.0 + _bars[i].value * 36;
-                          return Align(
-                            alignment: Alignment.center,
-                            child: Container(
-                              height: h,
-                              decoration: BoxDecoration(
-                                color: _purple,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('00:42:17',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _ink)),
-                _InkBox(
-                  radius: 20,
-                  color: const Color(0xFFFCEBEB),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 3),
-                  child: const Text('recording',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFA32D2D))),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-}
-
-// ─── Ring Progress Card ───────────────────────────────────────────────────────
-
-class _RingProgressCard extends StatefulWidget {
-  const _RingProgressCard({required this.ready, required this.total});
-  final int ready, total;
-
-  @override
-  State<_RingProgressCard> createState() => _RingProgressCardState();
-}
-
-class _RingProgressCardState extends State<_RingProgressCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1400));
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
-    _ctrl.forward();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  final String label, value, sublabel;
+  final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final pct =
-        widget.total == 0 ? 0.0 : widget.ready / widget.total;
-    return _InkBox(
-      color: _greenL,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('NOTES READY',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .6,
-                    color: _green)),
-          ),
-          const SizedBox(height: 16),
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (_, __) => SizedBox(
-              width: 130,
-              height: 130,
-              child: CustomPaint(
-                painter: _RingPainter(
-                  progress: _anim.value * pct,
-                  trackColor: const Color(0xFF9FE1CB),
-                  fillColor: _green,
-                  strokeWidth: 13,
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${widget.ready}',
-                          style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.w800,
-                              color: _ink,
-                              height: 1)),
-                      Text('of ${widget.total}',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: _green)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Completion',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _ink)),
-              AnimatedBuilder(
-                animation: _anim,
-                builder: (_, __) => Text(
-                  '${(_anim.value * pct * 100).round()}%',
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _green),
-                ),
-              ),
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              ScribTheme.surface,
+              color.withValues(alpha: 0.06),
             ],
           ),
-          const SizedBox(height: 6),
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (_, __) => ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: _anim.value * pct,
-                minHeight: 6,
-                backgroundColor: const Color(0xFF9FE1CB),
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(_green),
-              ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon, color: color, size: 15),
+            ),
+            const SizedBox(height: 10),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                    letterSpacing: -0.5)),
+            const SizedBox(height: 1),
+            Text(sublabel,
+                style: const TextStyle(
+                    fontSize: 11, color: ScribTheme.textSecondary)),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Custom painter for the donut ring
-class _RingPainter extends CustomPainter {
-  const _RingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.fillColor,
-    required this.strokeWidth,
-  });
-  final double progress;
-  final Color trackColor, fillColor;
-  final double strokeWidth;
+// ─── Subject Filter Chips ─────────────────────────────────────────────────────
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = trackColor
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2,
-      2 * math.pi * progress,
-      false,
-      Paint()
-        ..color = fillColor
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) =>
-      old.progress != progress;
-}
-
-// ─── Hours Card ───────────────────────────────────────────────────────────────
-
-class _HoursCard extends StatelessWidget {
-  const _HoursCard({required this.totalMins});
-  final int totalMins;
+class _SubjectChips extends StatelessWidget {
+  const _SubjectChips(
+      {required this.subjects,
+      required this.selected,
+      required this.onSelect});
+  final List<String> subjects;
+  final String? selected;
+  final void Function(String?) onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final h = totalMins ~/ 60;
-    final m = totalMins % 60;
-    return _InkBox(
-      color: _amberL,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('HOURS RECORDED',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .6,
-                  color: _amber)),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text('$h',
-                  style: const TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w800,
-                      color: _ink,
-                      letterSpacing: -2,
-                      height: 1)),
-              const Text('h ',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: _amber)),
-              Text('$m',
-                  style: const TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: _ink,
-                      letterSpacing: -1,
-                      height: 1)),
-              const Text('m',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _amber)),
-            ],
-          ),
-          const Text('past 30 days',
-              style: TextStyle(fontSize: 12, color: _amber)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _ZoneStat(
-                  dot: _purple,
-                  label: 'Lectures',
-                  value: '${(h * 0.75).round()}h'),
-              Container(
-                width: 1,
-                height: 36,
-                color: _ink.withOpacity(.12),
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              _ZoneStat(
-                  dot: _green,
-                  label: 'Seminars',
-                  value: '${(h * 0.25).round()}h'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ZoneStat extends StatelessWidget {
-  const _ZoneStat(
-      {required this.dot, required this.label, required this.value});
-  final Color dot;
-  final String label, value;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: dot,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _ink, width: 1.5),
+    return SizedBox(
+      height: 46,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        itemCount: subjects.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final subject = subjects[i];
+          final isSelected = selected == subject;
+          return GestureDetector(
+            onTap: () => onSelect(isSelected ? null : subject),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? ScribTheme.primary
+                    : ScribTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? ScribTheme.primary
+                      : ScribTheme.surfaceVariant,
                 ),
               ),
-              const SizedBox(width: 5),
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 11, color: Colors.black54)),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: _ink)),
-        ],
-      );
-}
-
-// ─── Processing Card ──────────────────────────────────────────────────────────
-
-class _ProcessingCard extends StatelessWidget {
-  const _ProcessingCard({required this.lectures});
-  final List<Lecture> lectures;
-
-  @override
-  Widget build(BuildContext context) => _InkBox(
-        color: Colors.white,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('PROCESSING',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .6,
-                    color: _ink)),
-            const SizedBox(height: 12),
-            ...lectures.take(2).map((l) => Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: _ProcessingRow(lecture: l),
-                )),
-          ],
-        ),
-      );
-}
-
-class _ProcessingRow extends StatelessWidget {
-  const _ProcessingRow({required this.lecture});
-  final Lecture lecture;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (lecture.status) {
-      LectureStatus.uploading =>
-        'Uploading ${(lecture.uploadProgress * 100).round()}%',
-      LectureStatus.transcribing => 'Transcribing…',
-      LectureStatus.generatingNotes => 'Generating notes…',
-      _ => '',
-    };
-    final isIndeterminate =
-        lecture.status != LectureStatus.uploading;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(lecture.title,
-                  style: const TextStyle(
+              child: Text(subject,
+                  style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _ink),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+                      fontWeight: FontWeight.w500,
+                      color: isSelected
+                          ? Colors.white
+                          : ScribTheme.textSecondary)),
             ),
-            const SizedBox(width: 8),
-            Text(label,
-                style: const TextStyle(fontSize: 11, color: _purple)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: isIndeterminate ? null : lecture.uploadProgress,
-            minHeight: 5,
-            backgroundColor: _purpleM.withOpacity(.35),
-            valueColor:
-                const AlwaysStoppedAnimation<Color>(_purple),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Heatmap Card ─────────────────────────────────────────────────────────────
-
-class _HeatmapCard extends StatefulWidget {
-  const _HeatmapCard({required this.lectures});
-  final List<Lecture> lectures;
-
-  @override
-  State<_HeatmapCard> createState() => _HeatmapCardState();
-}
-
-class _HeatmapCardState extends State<_HeatmapCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final List<int> _cells;
-
-  @override
-  void initState() {
-    super.initState();
-    final rng = math.Random(42);
-    _cells = List.generate(28, (_) => rng.nextInt(3));
-    _ctrl = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1400))
-      ..forward();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const colors = [_pinkL, _pinkM, _pink];
-    const strokes = [
-      Color(0xFFD4537E),
-      Color(0xFF993556),
-      Color(0xFF4B1528),
-    ];
-
-    return _InkBox(
-      color: _pinkL,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('ACTIVITY CALENDAR',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .6,
-                      color: _pink)),
-              _InkBox(
-                radius: 20,
-                color: Colors.white.withOpacity(.6),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 3),
-                child: const Text('Apr 2026',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _pink)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          AnimatedBuilder(
-            animation: _ctrl,
-            builder: (_, __) {
-              final revealed =
-                  (_ctrl.value * _cells.length).round();
-              return Wrap(
-                spacing: 5,
-                runSpacing: 5,
-                children: List.generate(_cells.length, (i) {
-                  final v = i < revealed ? _cells[i] : 0;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: colors[v],
-                      borderRadius: BorderRadius.circular(7),
-                      border:
-                          Border.all(color: strokes[v], width: 1.5),
-                    ),
-                  );
-                }),
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              for (var i = 0; i < 3; i++)
-                Padding(
-                  padding: const EdgeInsets.only(right: 14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: colors[i],
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                              color: strokes[i], width: 1.5),
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                          i == 0
-                              ? 'none'
-                              : i == 1
-                                  ? '1 lec'
-                                  : '2+ lec',
-                          style: const TextStyle(
-                              fontSize: 11, color: _pink)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1022,74 +578,561 @@ class _LectureCard extends StatelessWidget {
   const _LectureCard({required this.lecture});
   final Lecture lecture;
 
+  Color get _color {
+    final colors = [
+      ScribTheme.primary,
+      ScribTheme.secondary,
+      const Color(0xFFF5A623),
+      const Color(0xFFE95B9B),
+      const Color(0xFF5BC8F5),
+    ];
+    if (lecture.subject != null) {
+      return colors[lecture.subject!.hashCode % colors.length];
+    }
+    return colors[lecture.title.hashCode % colors.length];
+  }
+
   @override
-  Widget build(BuildContext context) => _InkBox(
-        color: Colors.white,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => NotesScreen(lecture: lecture)),
+  Widget build(BuildContext context) {
+    final color = _color;
+    final isCompleted = lecture.status == LectureStatus.completed;
+    final isFailed = lecture.status == LectureStatus.failed;
+    final isProcessing = !isCompleted && !isFailed;
+
+    final accentColor = isFailed ? ScribTheme.error : color;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: ScribTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                _InkBox(
-                  width: 44,
-                  height: 44,
-                  radius: 13,
-                  color: _greenL,
-                  child: const Icon(Icons.check_rounded,
-                      size: 22, color: _green),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(lecture.title,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: _ink),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          if (lecture.subject != null) ...[
-                            _InkBox(
-                              radius: 20,
-                              color: _purpleL,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              child: Text(lecture.subject!,
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _purple)),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                          Text(
-                            '${lecture.duration.inMinutes}m · '
-                            '${DateFormat('MMM d').format(lecture.recordedAt)}',
-                            style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.black38),
-                          ),
-                        ],
-                      ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Colored left accent bar
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      accentColor,
+                      accentColor.withValues(alpha: 0.6),
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_rounded,
-                    size: 16, color: Colors.black26),
-              ],
-            ),
+              ),
+
+              // Card content
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isCompleted
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      NotesScreen(lecture: lecture)),
+                            )
+                        : isFailed
+                            ? () => _showFailedDialog(context, lecture)
+                            : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => ProcessingScreen(
+                                          lectureId: lecture.id)),
+                                ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              // Icon
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(_statusIcon(lecture.status),
+                                    color: color, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      lecture.title,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: ScribTheme.onSurface,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        if (lecture.subject != null) ...[
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: color.withValues(
+                                                  alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(lecture.subject!,
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: color,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        Text(
+                                          _formatDuration(lecture.duration),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  ScribTheme.textSecondary),
+                                        ),
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 5),
+                                          child: Text('·',
+                                              style: TextStyle(
+                                                  color: ScribTheme
+                                                      .textSecondary,
+                                                  fontSize: 12)),
+                                        ),
+                                        Text(
+                                          DateFormat('MMM d')
+                                              .format(lecture.recordedAt),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  ScribTheme.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Right action
+                              if (isCompleted)
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                      Icons.arrow_forward_ios_rounded,
+                                      color: color,
+                                      size: 13),
+                                )
+                              else if (isFailed)
+                                GestureDetector(
+                                  onTap: () => context
+                                      .read<LectureProvider>()
+                                      .deleteLecture(lecture.id),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: ScribTheme.error
+                                          .withValues(alpha: 0.1),
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: ScribTheme.error,
+                                        size: 15),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          // Processing indicator
+                          if (isProcessing) ...[
+                            const SizedBox(height: 14),
+                            _ProcessingBar(lecture: lecture),
+                          ],
+
+                          // Failed hint
+                          if (isFailed) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color:
+                                    ScribTheme.error.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.info_outline_rounded,
+                                      color: ScribTheme.error, size: 13),
+                                  SizedBox(width: 6),
+                                  Text('Failed — tap to see details',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: ScribTheme.error)),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // Notes preview chips
+                          if (isCompleted && lecture.notes != null) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                _PreviewChip(
+                                  icon: Icons.style_outlined,
+                                  label:
+                                      '${lecture.notes!.flashcards.length} flashcards',
+                                  color: ScribTheme.secondary,
+                                ),
+                                const SizedBox(width: 8),
+                                _PreviewChip(
+                                  icon: Icons.sell_outlined,
+                                  label:
+                                      '${lecture.notes!.topics.length} topics',
+                                  color: ScribTheme.primary,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
+
+  void _showFailedDialog(BuildContext context, Lecture lecture) {
+    final provider = context.read<LectureProvider>();
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: ScribTheme.surface,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Processing Failed',
+            style: TextStyle(color: ScribTheme.onSurface)),
+        content: Text(
+          lecture.errorMessage ?? 'Unknown error',
+          style: const TextStyle(
+              color: ScribTheme.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              provider.deleteLecture(lecture.id);
+            },
+            child: const Text('Delete',
+                style: TextStyle(color: ScribTheme.error)),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              provider.retryLecture(lecture.id);
+            },
+            style: FilledButton.styleFrom(
+                backgroundColor: ScribTheme.primary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10))),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _statusIcon(LectureStatus s) => switch (s) {
+        LectureStatus.completed => Icons.check_circle_outline_rounded,
+        LectureStatus.failed => Icons.error_outline_rounded,
+        LectureStatus.transcribing => Icons.record_voice_over_outlined,
+        LectureStatus.generatingNotes => Icons.auto_awesome_outlined,
+        _ => Icons.cloud_upload_outlined,
+      };
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+}
+
+class _PreviewChip extends StatelessWidget {
+  const _PreviewChip(
+      {required this.icon, required this.label, required this.color});
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProcessingBar extends StatelessWidget {
+  const _ProcessingBar({required this.lecture});
+  final Lecture lecture;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (lecture.status) {
+      LectureStatus.uploading =>
+        'Uploading ${(lecture.uploadProgress * 100).toStringAsFixed(0)}%',
+      LectureStatus.transcribing => 'Transcribing speech...',
+      LectureStatus.generatingNotes => 'Generating notes...',
+      _ => '',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: ScribTheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 12, color: ScribTheme.textSecondary)),
+            const Spacer(),
+            const Text('Tap to view',
+                style: TextStyle(
+                    fontSize: 11, color: ScribTheme.primary)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: lecture.status == LectureStatus.uploading
+                ? lecture.uploadProgress
+                : null,
+            backgroundColor: ScribTheme.surfaceVariant,
+            color: ScribTheme.primary,
+            minHeight: 3,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.onRecord});
+  final VoidCallback onRecord;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Layered glow rings
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ScribTheme.primary.withValues(alpha: 0.05),
+                  ),
+                ),
+                Container(
+                  width: 104,
+                  height: 104,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ScribTheme.primary.withValues(alpha: 0.08),
+                  ),
+                ),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [ScribTheme.primary, Color(0xFF8B7FF5)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ScribTheme.primary.withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.mic_rounded,
+                      size: 32, color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
+            const Text('No lectures yet',
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: ScribTheme.onSurface,
+                    letterSpacing: -0.5)),
+            const SizedBox(height: 10),
+            const Text(
+              'Record your first lecture and let Scrib turn it into smart study notes automatically.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 14,
+                  color: ScribTheme.textSecondary,
+                  height: 1.6),
+            ),
+            const SizedBox(height: 36),
+            GestureDetector(
+              onTap: onRecord,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [ScribTheme.primary, Color(0xFF8B7FF5)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ScribTheme.primary.withValues(alpha: 0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.mic_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 10),
+                    Text('Start Recording',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── No Results ───────────────────────────────────────────────────────────────
+
+class _NoResultsState extends StatelessWidget {
+  const _NoResultsState({required this.query, required this.onClear});
+  final String query;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.search_off_rounded,
+              size: 52, color: ScribTheme.textSecondary),
+          const SizedBox(height: 16),
+          const Text('Nothing found',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: ScribTheme.onSurface)),
+          const SizedBox(height: 6),
+          Text('No lectures match "$query"',
+              style: const TextStyle(
+                  fontSize: 13, color: ScribTheme.textSecondary)),
+          const SizedBox(height: 20),
+          TextButton(
+            onPressed: onClear,
+            child: const Text('Clear search',
+                style: TextStyle(color: ScribTheme.primary)),
+          ),
+        ],
+      ),
+    );
+  }
 }
