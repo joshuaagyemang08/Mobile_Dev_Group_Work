@@ -3,7 +3,7 @@
 // NEVER put the secret key here.
 
 class SupabaseConfig {
-  static const String url = 'https://aumjypligwftjfcxqoci.supabase.co';
+  static const String url = 'https://aumjypllgwftjfcxqoci.supabase.co';
   static const String anonKey = 'sb_publishable_O2igyq6qZdKH0EHRya-IFA_mPJCFLUB';
 
   /// Web OAuth Client ID from Google Cloud Console.

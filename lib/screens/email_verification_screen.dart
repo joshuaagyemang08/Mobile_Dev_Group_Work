@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/supabase_config.dart';
 import '../core/theme.dart';
 import 'home_screen.dart';
 
@@ -78,6 +79,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       await Supabase.instance.client.auth.resend(
         type: OtpType.signup,
         email: widget.email,
+        emailRedirectTo: SupabaseConfig.redirectUrl,
       );
       if (mounted) {
         _showSnack('Verification email sent!');

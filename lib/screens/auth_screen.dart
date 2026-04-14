@@ -189,12 +189,23 @@ class _AuthScreenState extends State<AuthScreen>
       } else {
         // ── Register flow ──
         final name = _nameController.text.trim();
-        await client.auth.signUp(
+        final response = await client.auth.signUp(
           email: email,
           password: password,
           data: {'name': name},
           emailRedirectTo: SupabaseConfig.redirectUrl,
         );
+
+        // Supabase may return a user with no identities when an account already
+        // exists (anti-enumeration behavior). In that case, guide user to login.
+        final existingIdentities = response.user?.identities ?? const [];
+        if (response.user != null && existingIdentities.isEmpty) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showError('Account already exists. Please log in or reset your password.');
+          }
+          return;
+        }
 
         // Save name locally for greeting
         final prefs = await SharedPreferences.getInstance();
@@ -212,6 +223,20 @@ class _AuthScreenState extends State<AuthScreen>
         return;
       }
     } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (!_isLogin && msg.contains('over_email_send_rate_limit')) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showError('Too many verification email requests. Wait about a minute, then tap Resend verification email.');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EmailVerificationScreen(email: email),
+            ),
+          );
+        }
+        return;
+      }
       if (mounted) {
         setState(() => _isLoading = false);
         _showError(e.message);
