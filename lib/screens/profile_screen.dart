@@ -211,8 +211,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 controller: _nameController,
                 label: 'Full Name',
                 icon: Icons.person_outline,
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Name is required' : null,
+                validator: (v) {
+                  final val = v?.trim() ?? '';
+                  if (val.isEmpty) return 'Name is required';
+                  if (val.length < 2) return 'Name must be at least 2 characters';
+                  if (!RegExp(r"^[a-zA-Z\s'-]+$").hasMatch(val)) {
+                    return 'Name can only contain letters and spaces';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _buildTextField(

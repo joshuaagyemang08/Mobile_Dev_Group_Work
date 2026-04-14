@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
@@ -376,6 +377,7 @@ class _RecordingScreenState extends State<RecordingScreen>
                   controller: _subjectController,
                   hint: 'Subject (optional)',
                   icon: Icons.school_outlined,
+                  maxLength: 50,
                 ),
                 const Spacer(),
                 // Mic button
@@ -647,6 +649,7 @@ class _RecordingScreenState extends State<RecordingScreen>
     required TextEditingController controller,
     required String hint,
     required IconData icon,
+    int maxLength = 100,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -656,6 +659,11 @@ class _RecordingScreenState extends State<RecordingScreen>
       ),
       child: TextField(
         controller: controller,
+        maxLength: maxLength,
+        // Block HTML/injection characters: < > { } ; \ "
+        inputFormatters: [
+          FilteringTextInputFormatter.deny(RegExp(r'[<>{};\\"]')),
+        ],
         style:
             const TextStyle(color: ScribTheme.onSurface, fontSize: 15),
         decoration: InputDecoration(
@@ -665,6 +673,7 @@ class _RecordingScreenState extends State<RecordingScreen>
           prefixIcon:
               Icon(icon, color: ScribTheme.textSecondary, size: 20),
           border: InputBorder.none,
+          counterText: '',
           contentPadding: const EdgeInsets.symmetric(
               vertical: 16, horizontal: 16),
         ),
