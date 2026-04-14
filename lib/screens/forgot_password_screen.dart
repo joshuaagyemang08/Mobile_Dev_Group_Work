@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/supabase_config.dart';
 import '../core/theme.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -42,7 +43,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     final email = _emailController.text.trim().toLowerCase();
 
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: SupabaseConfig.redirectUrl,
+      );
       if (mounted) {
         setState(() {
           _isLoading = false;

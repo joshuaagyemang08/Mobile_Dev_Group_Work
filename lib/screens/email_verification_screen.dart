@@ -79,6 +79,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       await Supabase.instance.client.auth.resend(
         type: OtpType.signup,
         email: widget.email,
+        emailRedirectTo: SupabaseConfig.redirectUrl,
       );
       if (mounted) {
         _showSnack('Verification email sent!');

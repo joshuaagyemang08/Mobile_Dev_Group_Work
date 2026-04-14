@@ -221,7 +221,7 @@ class _AuthScreenState extends State<AuthScreen>
         );
 
         // Supabase may return a user with no identities when an account already
-        // exists (anti-enumeration behavior). Guide user to login instead.
+        // exists (anti-enumeration behavior). In that case, guide user to login.
         final existingIdentities = response.user?.identities ?? const [];
         if (response.user != null && existingIdentities.isEmpty) {
           if (mounted) {
@@ -251,7 +251,7 @@ class _AuthScreenState extends State<AuthScreen>
       if (!_isLogin && msg.contains('over_email_send_rate_limit')) {
         if (mounted) {
           setState(() => _isLoading = false);
-          _showError('Too many requests. Wait a minute then tap Resend verification email.');
+          _showError('Too many verification email requests. Wait about a minute, then tap Resend verification email.');
           Navigator.push(
             context,
             MaterialPageRoute(
