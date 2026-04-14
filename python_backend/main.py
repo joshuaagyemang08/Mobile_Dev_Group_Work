@@ -76,7 +76,7 @@ async def transcribe_file(audio: UploadFile = File(None), file: UploadFile = Fil
         if size == 0:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-        print(f"📁 Received: {filename} ({size/1024/1024:.2f} MB)")
+        print(f"Received: {filename} ({size/1024/1024:.2f} MB)")
 
         result = transcribe_audio(tmp.name)
 

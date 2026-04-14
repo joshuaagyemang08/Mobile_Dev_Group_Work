@@ -181,7 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: BoxShape.circle,
                           color: Theme.of(context).cardTheme.color,
                           border: Border.all(
-                              color: ScribTheme.primary.withOpacity(0.4),
+                              color: ScribTheme.primary.withValues(alpha: 0.4),
                               width: 3),
                         ),
                         child: ClipOval(child: _buildProfileImage()),
@@ -373,7 +373,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_imagePath == null || _imagePath!.isEmpty) {
       final name = _nameController.text;
       return Container(
-        color: ScribTheme.primary.withOpacity(0.15),
+        color: ScribTheme.primary.withValues(alpha: 0.15),
         child: Center(
           child: Text(
             name.isNotEmpty ? name[0].toUpperCase() : 'S',

@@ -4,12 +4,50 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../core/theme.dart';
 import '../models/lecture.dart';
 import '../providers/lecture_provider.dart';
+
+MarkdownStyleSheet _mdSheet(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  return MarkdownStyleSheet(
+    p: TextStyle(fontSize: 14, color: cs.onSurface, height: 1.65),
+    h1: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: cs.onSurface,
+        height: 1.3),
+    h2: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: ScribTheme.primary,
+        height: 1.3),
+    h3: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: ScribTheme.secondary,
+        height: 1.3),
+    strong: TextStyle(fontWeight: FontWeight.bold, color: cs.onSurface),
+    em: TextStyle(fontStyle: FontStyle.italic, color: cs.onSurface),
+    listBullet: TextStyle(fontSize: 14, color: ScribTheme.textSecondary),
+    blockquote: TextStyle(
+        fontSize: 14,
+        color: cs.onSurfaceVariant,
+        fontStyle: FontStyle.italic),
+    code: TextStyle(
+        fontSize: 13,
+        color: ScribTheme.primary,
+        backgroundColor: ScribTheme.primary.withValues(alpha: 0.1)),
+    h1Padding: const EdgeInsets.only(top: 8, bottom: 10),
+    h2Padding: const EdgeInsets.only(top: 18, bottom: 6),
+    h3Padding: const EdgeInsets.only(top: 10, bottom: 4),
+    blockSpacing: 6,
+  );
+}
 
 class NotesScreen extends StatefulWidget {
   final Lecture lecture;
@@ -312,7 +350,7 @@ class _AudioPlayerBar extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: ScribTheme.primary.withOpacity(0.12),
+                    color: ScribTheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.mic_rounded,
@@ -363,7 +401,7 @@ class _AudioPlayerBar extends StatelessWidget {
                 activeTrackColor: ScribTheme.primary,
                 inactiveTrackColor: ScribTheme.surfaceVariant,
                 thumbColor: ScribTheme.primary,
-                overlayColor: ScribTheme.primary.withOpacity(0.2),
+                overlayColor: ScribTheme.primary.withValues(alpha: 0.2),
               ),
               child: Slider(
                 value: progress.clamp(0.0, 1.0),
@@ -396,87 +434,12 @@ class _NotesTab extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      child: _MarkdownText(content: fullNotes),
+      child: MarkdownBody(
+        data: fullNotes,
+        selectable: true,
+        styleSheet: _mdSheet(context),
+      ),
     );
-  }
-}
-
-class _MarkdownText extends StatelessWidget {
-  const _MarkdownText({required this.content});
-  final String content;
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = content.split('\n');
-    final widgets = <Widget>[];
-
-    for (final line in lines) {
-      if (line.startsWith('# ')) {
-        widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 12),
-          child: Text(line.substring(2),
-              style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: ScribTheme.onSurface)),
-        ));
-      } else if (line.startsWith('## ')) {
-        widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 20, bottom: 8),
-          child: Text(line.substring(3),
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: ScribTheme.primary)),
-        ));
-      } else if (line.startsWith('### ')) {
-        widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 4),
-          child: Text(line.substring(4),
-              style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: ScribTheme.secondary)),
-        ));
-      } else if (line.startsWith('- ') || line.startsWith('• ')) {
-        widgets.add(Padding(
-          padding: const EdgeInsets.only(bottom: 4, left: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 6, right: 8),
-                child: Icon(Icons.circle,
-                    size: 5, color: ScribTheme.textSecondary),
-              ),
-              Expanded(
-                child: Text(
-                  line.substring(2),
-                  style: const TextStyle(
-                      fontSize: 14,
-                      color: ScribTheme.onSurface,
-                      height: 1.5),
-                ),
-              ),
-            ],
-          ),
-        ));
-      } else if (line.trim().isEmpty) {
-        widgets.add(const SizedBox(height: 8));
-      } else {
-        widgets.add(Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text(line,
-              style: const TextStyle(
-                  fontSize: 14,
-                  color: ScribTheme.onSurface,
-                  height: 1.6)),
-        ));
-      }
-    }
-
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 }
 
@@ -510,10 +473,10 @@ class _SummaryTab extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: ScribTheme.secondary.withOpacity(0.1),
+                          color: ScribTheme.secondary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: ScribTheme.secondary.withOpacity(0.3)),
+                              color: ScribTheme.secondary.withValues(alpha: 0.3)),
                         ),
                         child: Text(t,
                             style: const TextStyle(
@@ -545,7 +508,7 @@ class _SummaryTab extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: ScribTheme.primary.withOpacity(0.12),
+                          color: ScribTheme.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.summarize_outlined,
@@ -560,73 +523,18 @@ class _SummaryTab extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text(notes.summary,
-                      style: const TextStyle(
-                          fontSize: 14,
-                          color: ScribTheme.onSurface,
-                          height: 1.6)),
+                  MarkdownBody(
+                    data: notes.summary,
+                    selectable: true,
+                    styleSheet: _mdSheet(context),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
           ],
 
-          // Key Points
-          if (notes.keyPoints.isNotEmpty) ...[
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: ScribTheme.secondary.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.lightbulb_outline_rounded,
-                      color: ScribTheme.secondary, size: 16),
-                ),
-                const SizedBox(width: 10),
-                const Text('Key Points',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: ScribTheme.onSurface)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...notes.keyPoints.asMap().entries.map((e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 26,
-                        height: 26,
-                        margin: const EdgeInsets.only(right: 12, top: 1),
-                        decoration: BoxDecoration(
-                          color: ScribTheme.primary.withOpacity(0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text('${e.key + 1}',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: ScribTheme.primary)),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(e.value,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                color: ScribTheme.onSurface,
-                                height: 1.5)),
-                      ),
-                    ],
-                  ),
-                )),
-          ],
-
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -761,7 +669,7 @@ class _FlashcardsTabState extends State<_FlashcardsTab>
                             text: card.question,
                             hint: 'Tap to reveal answer',
                             bgColor: ScribTheme.surface,
-                            borderColor: ScribTheme.primary.withOpacity(0.3),
+                            borderColor: ScribTheme.primary.withValues(alpha: 0.3),
                           )
                         : Transform(
                             alignment: Alignment.center,
@@ -771,9 +679,9 @@ class _FlashcardsTabState extends State<_FlashcardsTab>
                               labelColor: ScribTheme.secondary,
                               text: card.answer,
                               hint: 'Tap to see question',
-                              bgColor: ScribTheme.secondary.withOpacity(0.06),
+                              bgColor: ScribTheme.secondary.withValues(alpha: 0.06),
                               borderColor:
-                                  ScribTheme.secondary.withOpacity(0.3),
+                                  ScribTheme.secondary.withValues(alpha: 0.3),
                             ),
                           ),
                   );
@@ -882,7 +790,7 @@ class _CardFace extends StatelessWidget {
         border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -896,9 +804,9 @@ class _CardFace extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
               decoration: BoxDecoration(
-                color: labelColor.withOpacity(0.12),
+                color: labelColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: labelColor.withOpacity(0.3)),
+                border: Border.all(color: labelColor.withValues(alpha: 0.3)),
               ),
               child: Text(label,
                   style: TextStyle(
@@ -1090,7 +998,7 @@ class _PhotosTab extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: ScribTheme.primary,
                     side: BorderSide(
-                        color: ScribTheme.primary.withOpacity(0.5)),
+                        color: ScribTheme.primary.withValues(alpha: 0.5)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
@@ -1111,7 +1019,7 @@ class _PhotosTab extends StatelessWidget {
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: ScribTheme.primary.withOpacity(0.08),
+                      color: ScribTheme.primary.withValues(alpha: 0.08),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.add_photo_alternate_outlined,
@@ -1203,7 +1111,7 @@ class _PhotoTile extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.black.withValues(alpha: 0.6),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.close_rounded,

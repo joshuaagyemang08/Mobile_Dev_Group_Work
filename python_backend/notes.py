@@ -96,7 +96,7 @@ Q: [question] | A: [answer]""",
         # Parse topics into list
         topics_list = [t.strip() for t in topics.split(",") if t.strip()]
 
-        print(f"✅ Notes generated — {len(flashcards)} flashcards, {len(topics_list)} topics")
+        print(f"Notes generated — {len(flashcards)} flashcards, {len(topics_list)} topics")
 
         return {
             "success": True,
