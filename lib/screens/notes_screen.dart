@@ -395,8 +395,64 @@ class _NotesTab extends StatelessWidget {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: _MarkdownText(content: fullNotes),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: ScribTheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: ScribTheme.surfaceVariant),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: ScribTheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.menu_book_rounded,
+                      size: 18, color: ScribTheme.primary),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Lecture Notes',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: ScribTheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: ScribTheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: ScribTheme.surfaceVariant),
+            ),
+            child: _MarkdownText(content: fullNotes),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -411,64 +467,122 @@ class _MarkdownText extends StatelessWidget {
     final widgets = <Widget>[];
 
     for (final line in lines) {
+      final trimmed = line.trim();
+      final numbered = RegExp(r'^(\d+)\.\s+(.*)$').firstMatch(trimmed);
+
       if (line.startsWith('# ')) {
         widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 12),
-          child: Text(line.substring(2),
+          padding: const EdgeInsets.only(top: 6, bottom: 12),
+          child: Text(_cleanInlineMarkdown(line.substring(2)),
               style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                   color: ScribTheme.onSurface)),
         ));
       } else if (line.startsWith('## ')) {
         widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 20, bottom: 8),
-          child: Text(line.substring(3),
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: ScribTheme.primary)),
+          padding: const EdgeInsets.only(top: 18, bottom: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: const BoxDecoration(
+                  color: ScribTheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              Expanded(
+                child: Text(_cleanInlineMarkdown(line.substring(3)),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: ScribTheme.primary)),
+              ),
+            ],
+          ),
         ));
       } else if (line.startsWith('### ')) {
         widgets.add(Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 4),
-          child: Text(line.substring(4),
+          padding: const EdgeInsets.only(top: 10, bottom: 6),
+          child: Text(_cleanInlineMarkdown(line.substring(4)),
               style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 14.5,
                   fontWeight: FontWeight.w600,
                   color: ScribTheme.secondary)),
         ));
-      } else if (line.startsWith('- ') || line.startsWith('• ')) {
+      } else if (numbered != null) {
+        final number = numbered.group(1) ?? '';
+        final body = _cleanInlineMarkdown(numbered.group(2) ?? '');
         widgets.add(Padding(
-          padding: const EdgeInsets.only(bottom: 4, left: 8),
+          padding: const EdgeInsets.only(bottom: 9),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 6, right: 8),
-                child: Icon(Icons.circle,
-                    size: 5, color: ScribTheme.textSecondary),
+              Container(
+                width: 24,
+                height: 24,
+                margin: const EdgeInsets.only(right: 10, top: 1),
+                decoration: BoxDecoration(
+                  color: ScribTheme.primary.withOpacity(0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    number,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: ScribTheme.primary,
+                    ),
+                  ),
+                ),
               ),
               Expanded(
                 child: Text(
-                  line.substring(2),
+                  body,
                   style: const TextStyle(
-                      fontSize: 14,
-                      color: ScribTheme.onSurface,
-                      height: 1.5),
+                    fontSize: 14,
+                    color: ScribTheme.onSurface,
+                    height: 1.6,
+                  ),
                 ),
               ),
             ],
           ),
         ));
-      } else if (line.trim().isEmpty) {
-        widgets.add(const SizedBox(height: 8));
+      } else if (line.startsWith('- ') || line.startsWith('• ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 6, left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 7, right: 8),
+                child: Icon(Icons.circle,
+                    size: 5, color: ScribTheme.textSecondary),
+              ),
+              Expanded(
+                child: Text(
+                  _cleanInlineMarkdown(line.substring(2)),
+                  style: const TextStyle(
+                      fontSize: 14,
+                      color: ScribTheme.onSurface,
+                      height: 1.6),
+                ),
+              ),
+            ],
+          ),
+        ));
+      } else if (trimmed.isEmpty) {
+        widgets.add(const SizedBox(height: 10));
       } else {
         widgets.add(Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text(line,
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(_cleanInlineMarkdown(line),
               style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 14.5,
                   color: ScribTheme.onSurface,
                   height: 1.6)),
         ));
@@ -480,6 +594,13 @@ class _MarkdownText extends StatelessWidget {
   }
 }
 
+String _cleanInlineMarkdown(String input) {
+  return input
+      .replaceAll('**', '')
+      .replaceAll('__', '')
+      .replaceAllMapped(RegExp(r'`([^`]*)`'), (m) => m.group(1) ?? '');
+}
+
 // ─── Tab 2: Summary ───────────────────────────────────────────────────────────
 
 class _SummaryTab extends StatelessWidget {
@@ -489,10 +610,69 @@ class _SummaryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (notes.summary.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ScribTheme.primary.withOpacity(0.22),
+                    ScribTheme.secondary.withOpacity(0.16),
+                  ],
+                ),
+                border: Border.all(
+                  color: ScribTheme.primary.withOpacity(0.24),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: ScribTheme.primary.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.summarize_rounded,
+                            color: ScribTheme.primary, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Quick Summary',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: ScribTheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _cleanInlineMarkdown(notes.summary),
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      color: ScribTheme.onSurface,
+                      height: 1.65,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
+
           // Topics
           if (notes.topics.isNotEmpty) ...[
             const Text('Topics Covered',
@@ -508,7 +688,7 @@ class _SummaryTab extends StatelessWidget {
               children: notes.topics
                   .map((t) => Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                            horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
                           color: ScribTheme.secondary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
@@ -522,51 +702,6 @@ class _SummaryTab extends StatelessWidget {
                                 fontWeight: FontWeight.w500)),
                       ))
                   .toList(),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Summary
-          if (notes.summary.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: ScribTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border(
-                  left: BorderSide(color: ScribTheme.primary, width: 3),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: ScribTheme.primary.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.summarize_outlined,
-                            color: ScribTheme.primary, size: 16),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text('Summary',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: ScribTheme.onSurface)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(notes.summary,
-                      style: const TextStyle(
-                          fontSize: 14,
-                          color: ScribTheme.onSurface,
-                          height: 1.6)),
-                ],
-              ),
             ),
             const SizedBox(height: 24),
           ],
@@ -593,37 +728,52 @@ class _SummaryTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            ...notes.keyPoints.asMap().entries.map((e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 26,
-                        height: 26,
-                        margin: const EdgeInsets.only(right: 12, top: 1),
-                        decoration: BoxDecoration(
-                          color: ScribTheme.primary.withOpacity(0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text('${e.key + 1}',
+            ...notes.keyPoints.asMap().entries.map(
+                  (e) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    decoration: BoxDecoration(
+                      color: ScribTheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: ScribTheme.surfaceVariant),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          margin: const EdgeInsets.only(right: 10, top: 1),
+                          decoration: BoxDecoration(
+                            color: ScribTheme.primary.withOpacity(0.14),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${e.key + 1}',
                               style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: ScribTheme.primary)),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: ScribTheme.primary,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: Text(e.value,
+                        Expanded(
+                          child: Text(
+                            _cleanInlineMarkdown(e.value),
                             style: const TextStyle(
-                                fontSize: 14,
-                                color: ScribTheme.onSurface,
-                                height: 1.5)),
-                      ),
-                    ],
+                              fontSize: 14,
+                              color: ScribTheme.onSurface,
+                              height: 1.55,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                )),
+                ),
           ],
 
           const SizedBox(height: 20),
