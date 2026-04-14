@@ -29,6 +29,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (mounted && user?.emailConfirmedAt != null) {
+        _goHome();
+      }
+    });
+  }
+
   // Listen for auth state changes — if the user clicks the link in the email
   // the session updates and we auto-navigate.
   late final _authSubscription =

@@ -235,14 +235,23 @@ class _AuthScreenState extends State<AuthScreen>
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_name', name);
 
+        final isAutoConfirmed = response.session != null ||
+            response.user?.emailConfirmedAt != null;
+
         if (mounted) {
           setState(() => _isLoading = false);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EmailVerificationScreen(email: email),
-            ),
-          );
+          if (isAutoConfirmed) {
+            _showSuccess('Account created successfully.');
+            await Future.delayed(const Duration(milliseconds: 500));
+            _navigateToHome();
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EmailVerificationScreen(email: email),
+              ),
+            );
+          }
         }
         return;
       }
