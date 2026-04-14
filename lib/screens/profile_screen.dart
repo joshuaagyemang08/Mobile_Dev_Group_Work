@@ -181,7 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: BoxShape.circle,
                           color: Theme.of(context).cardTheme.color,
                           border: Border.all(
-                              color: ScribTheme.primary.withOpacity(0.4),
+                              color: ScribTheme.primary.withValues(alpha: 0.4),
                               width: 3),
                         ),
                         child: ClipOval(child: _buildProfileImage()),
@@ -211,8 +211,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 controller: _nameController,
                 label: 'Full Name',
                 icon: Icons.person_outline,
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Name is required' : null,
+                validator: (v) {
+                  final val = v?.trim() ?? '';
+                  if (val.isEmpty) return 'Name is required';
+                  if (val.length < 2) return 'Name must be at least 2 characters';
+                  if (!RegExp(r"^[a-zA-Z\s'-]+$").hasMatch(val)) {
+                    return 'Name can only contain letters and spaces';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               _buildTextField(
@@ -366,7 +373,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_imagePath == null || _imagePath!.isEmpty) {
       final name = _nameController.text;
       return Container(
-        color: ScribTheme.primary.withOpacity(0.15),
+        color: ScribTheme.primary.withValues(alpha: 0.15),
         child: Center(
           child: Text(
             name.isNotEmpty ? name[0].toUpperCase() : 'S',

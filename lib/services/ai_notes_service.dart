@@ -58,17 +58,17 @@ class AiNotesService {
   // Future<List<QuizQuestion>> generateQuiz(LectureNotes notes) async { ... }
 
   /// Builds a markdown-formatted full notes string from the payload fields.
+  /// Intentionally excludes the summary — that lives in the Summary tab.
+  /// Notes tab = detailed study content: key points + takeaways.
   String _buildFullNotes(Map<String, dynamic> payload) {
     final buffer = StringBuffer();
     final title = payload['title'] as String? ?? '';
-    final summary = payload['summary'] as String? ?? payload['overview'] as String? ?? '';
     final keyPoints = payload['key_points'] as String? ?? '';
     final takeaways = payload['takeaways'] as String? ?? '';
 
     if (title.isNotEmpty) buffer.writeln('# $title\n');
-    if (summary.isNotEmpty) buffer.writeln('## Summary\n$summary\n');
     if (keyPoints.isNotEmpty) buffer.writeln('## Key Points\n$keyPoints\n');
-    if (takeaways.isNotEmpty) buffer.writeln('## Takeaways\n$takeaways\n');
+    if (takeaways.isNotEmpty) buffer.writeln('## Key Takeaways\n$takeaways\n');
 
     return buffer.toString();
   }

@@ -73,7 +73,7 @@ class ScribTheme {
       cardTheme: CardThemeData(
         color: sf,
         elevation: isDark ? 0 : 2,
-        shadowColor: Colors.black.withOpacity(0.08),
+        shadowColor: Colors.black.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       appBarTheme: AppBarTheme(
@@ -95,8 +95,8 @@ class ScribTheme {
             (s) => s.contains(WidgetState.selected) ? primary : Colors.grey),
         trackColor: WidgetStateProperty.resolveWith(
             (s) => s.contains(WidgetState.selected)
-                ? primary.withOpacity(0.4)
-                : Colors.grey.withOpacity(0.3)),
+                ? primary.withValues(alpha: 0.4)
+                : Colors.grey.withValues(alpha: 0.3)),
       ),
     );
   }

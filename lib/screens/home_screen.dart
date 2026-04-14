@@ -226,15 +226,17 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          20, MediaQuery.of(context).padding.top + 20, 20, 20),
+          20, MediaQuery.of(context).padding.top + 24, 20, 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          end: Alignment.bottomCenter,
           colors: [
-            ScribTheme.primary.withOpacity(0.12),
+            ScribTheme.primary.withValues(alpha: 0.18),
+            ScribTheme.secondary.withValues(alpha: 0.04),
             ScribTheme.background,
           ],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
       child: Row(
@@ -244,20 +246,42 @@ class _Header extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  greeting,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: ScribTheme.textSecondary,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: ScribTheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.wb_sunny_rounded,
+                              color: ScribTheme.primary, size: 12),
+                          const SizedBox(width: 5),
+                          Text(
+                            greeting,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: ScribTheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 10),
                 Text(
-                  userName.isNotEmpty ? '$userName 👋' : 'Welcome back 👋',
+                  userName.isNotEmpty ? 'Hey, $userName!' : 'Welcome back!',
                   style: const TextStyle(
-                    fontSize: 24,
+                    fontSize: 26,
                     fontWeight: FontWeight.bold,
                     color: ScribTheme.onSurface,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -269,6 +293,7 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 16),
           // Avatar — taps to open profile
           GestureDetector(
             onTap: () => Navigator.push(
@@ -276,20 +301,21 @@ class _Header extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const ProfileScreen()),
             ),
             child: Container(
-              width: 48,
-              height: 48,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [ScribTheme.primary, Color(0xFF7B6FF0)],
+                  colors: [ScribTheme.primary, Color(0xFF8B7FF5)],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: ScribTheme.primary.withOpacity(0.3),
-                    blurRadius: 12,
+                    color: ScribTheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 14,
                     spreadRadius: 1,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -321,24 +347,41 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 46,
+      height: 48,
       decoration: BoxDecoration(
         color: ScribTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: ScribTheme.surfaceVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
         style: const TextStyle(color: ScribTheme.onSurface, fontSize: 14),
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           hintText: 'Search lectures or subjects...',
           hintStyle:
-              TextStyle(color: ScribTheme.textSecondary, fontSize: 14),
-          prefixIcon: Icon(Icons.search_rounded,
+              const TextStyle(color: ScribTheme.textSecondary, fontSize: 14),
+          prefixIcon: const Icon(Icons.search_rounded,
               color: ScribTheme.textSecondary, size: 20),
+          suffixIcon: controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded,
+                      color: ScribTheme.textSecondary, size: 18),
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                )
+              : null,
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 13),
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
     );
@@ -427,27 +470,43 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
         decoration: BoxDecoration(
-          color: ScribTheme.surface,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              ScribTheme.surface,
+              color.withValues(alpha: 0.06),
+            ],
+          ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(9),
               ),
-              child: Icon(icon, color: color, size: 16),
+              child: Icon(icon, color: color, size: 15),
             ),
             const SizedBox(height: 10),
             Text(value,
                 style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: color)),
+                    color: color,
+                    letterSpacing: -0.5)),
+            const SizedBox(height: 1),
             Text(sublabel,
                 style: const TextStyle(
                     fontSize: 11, color: ScribTheme.textSecondary)),
@@ -540,190 +599,243 @@ class _LectureCard extends StatelessWidget {
     final isFailed = lecture.status == LectureStatus.failed;
     final isProcessing = !isCompleted && !isFailed;
 
+    final accentColor = isFailed ? ScribTheme.error : color;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: ScribTheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isFailed
-              ? ScribTheme.error.withOpacity(0.3)
-              : isCompleted
-                  ? color.withOpacity(0.15)
-                  : ScribTheme.surfaceVariant.withOpacity(0.5),
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: InkWell(
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        onTap: isCompleted
-            ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => NotesScreen(lecture: lecture)),
-                )
-            : isFailed
-                ? () => _showFailedDialog(context, lecture)
-                : () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              ProcessingScreen(lectureId: lecture.id)),
-                    ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  // Icon
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(_statusIcon(lecture.status),
-                        color: color, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          lecture.title,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: ScribTheme.onSurface,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            if (lecture.subject != null) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(lecture.subject!,
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: color,
-                                        fontWeight: FontWeight.w500)),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              _formatDuration(lecture.duration),
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: ScribTheme.textSecondary),
-                            ),
-                            const SizedBox(width: 4),
-                            const Text('·',
-                                style: TextStyle(
-                                    color: ScribTheme.textSecondary,
-                                    fontSize: 12)),
-                            const SizedBox(width: 4),
-                            Text(
-                              DateFormat('MMM d')
-                                  .format(lecture.recordedAt),
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: ScribTheme.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Right action
-                  if (isCompleted)
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Icons.arrow_forward_ios_rounded,
-                          color: color, size: 14),
-                    )
-                  else if (isFailed)
-                    GestureDetector(
-                      onTap: () => context
-                          .read<LectureProvider>()
-                          .deleteLecture(lecture.id),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: ScribTheme.error.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.delete_outline_rounded,
-                            color: ScribTheme.error, size: 16),
-                      ),
-                    ),
-                ],
-              ),
-
-              // Processing indicator
-              if (isProcessing) ...[
-                const SizedBox(height: 14),
-                _ProcessingBar(lecture: lecture),
-              ],
-
-              // Failed hint
-              if (isFailed) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: ScribTheme.error.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.info_outline_rounded,
-                          color: ScribTheme.error, size: 13),
-                      SizedBox(width: 6),
-                      Text('Failed — tap to see details',
-                          style: TextStyle(
-                              fontSize: 12, color: ScribTheme.error)),
+              // Colored left accent bar
+              Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      accentColor,
+                      accentColor.withValues(alpha: 0.6),
                     ],
                   ),
                 ),
-              ],
+              ),
 
-              // Notes preview chips
-              if (isCompleted && lecture.notes != null) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _PreviewChip(
-                      icon: Icons.style_outlined,
-                      label:
-                          '${lecture.notes!.flashcards.length} flashcards',
-                      color: ScribTheme.secondary,
+              // Card content
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isCompleted
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      NotesScreen(lecture: lecture)),
+                            )
+                        : isFailed
+                            ? () => _showFailedDialog(context, lecture)
+                            : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => ProcessingScreen(
+                                          lectureId: lecture.id)),
+                                ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              // Icon
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(_statusIcon(lecture.status),
+                                    color: color, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      lecture.title,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: ScribTheme.onSurface,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        if (lecture.subject != null) ...[
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: color.withValues(
+                                                  alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(lecture.subject!,
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: color,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        Text(
+                                          _formatDuration(lecture.duration),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  ScribTheme.textSecondary),
+                                        ),
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 5),
+                                          child: Text('·',
+                                              style: TextStyle(
+                                                  color: ScribTheme
+                                                      .textSecondary,
+                                                  fontSize: 12)),
+                                        ),
+                                        Text(
+                                          DateFormat('MMM d')
+                                              .format(lecture.recordedAt),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  ScribTheme.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Right action
+                              if (isCompleted)
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                      Icons.arrow_forward_ios_rounded,
+                                      color: color,
+                                      size: 13),
+                                )
+                              else if (isFailed)
+                                GestureDetector(
+                                  onTap: () => context
+                                      .read<LectureProvider>()
+                                      .deleteLecture(lecture.id),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: ScribTheme.error
+                                          .withValues(alpha: 0.1),
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: ScribTheme.error,
+                                        size: 15),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          // Processing indicator
+                          if (isProcessing) ...[
+                            const SizedBox(height: 14),
+                            _ProcessingBar(lecture: lecture),
+                          ],
+
+                          // Failed hint
+                          if (isFailed) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color:
+                                    ScribTheme.error.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.info_outline_rounded,
+                                      color: ScribTheme.error, size: 13),
+                                  SizedBox(width: 6),
+                                  Text('Failed — tap to see details',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: ScribTheme.error)),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // Notes preview chips
+                          if (isCompleted && lecture.notes != null) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                _PreviewChip(
+                                  icon: Icons.style_outlined,
+                                  label:
+                                      '${lecture.notes!.flashcards.length} flashcards',
+                                  color: ScribTheme.secondary,
+                                ),
+                                const SizedBox(width: 8),
+                                _PreviewChip(
+                                  icon: Icons.sell_outlined,
+                                  label:
+                                      '${lecture.notes!.topics.length} topics',
+                                  color: ScribTheme.primary,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    _PreviewChip(
-                      icon: Icons.sell_outlined,
-                      label: '${lecture.notes!.topics.length} topics',
-                      color: ScribTheme.primary,
-                    ),
-                  ],
+                  ),
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -801,9 +913,9 @@ class _PreviewChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -885,49 +997,100 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
+        padding: const EdgeInsets.symmetric(horizontal: 36),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                gradient: RadialGradient(colors: [
-                  ScribTheme.primary.withOpacity(0.15),
-                  Colors.transparent,
-                ]),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.mic_none_rounded,
-                  size: 50, color: ScribTheme.primary),
+            // Layered glow rings
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ScribTheme.primary.withValues(alpha: 0.05),
+                  ),
+                ),
+                Container(
+                  width: 104,
+                  height: 104,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ScribTheme.primary.withValues(alpha: 0.08),
+                  ),
+                ),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [ScribTheme.primary, Color(0xFF8B7FF5)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ScribTheme.primary.withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.mic_rounded,
+                      size: 32, color: Colors.white),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             const Text('No lectures yet',
                 style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: ScribTheme.onSurface)),
-            const SizedBox(height: 8),
+                    color: ScribTheme.onSurface,
+                    letterSpacing: -0.5)),
+            const SizedBox(height: 10),
             const Text(
-              'Record a lecture and let Scrib turn it into structured study notes automatically.',
+              'Record your first lecture and let Scrib turn it into smart study notes automatically.',
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 14,
                   color: ScribTheme.textSecondary,
-                  height: 1.5),
+                  height: 1.6),
             ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: onRecord,
-              icon: const Icon(Icons.mic_rounded),
-              label: const Text('Start Recording'),
-              style: FilledButton.styleFrom(
-                backgroundColor: ScribTheme.primary,
+            const SizedBox(height: 36),
+            GestureDetector(
+              onTap: onRecord,
+              child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 28, vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                    horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [ScribTheme.primary, Color(0xFF8B7FF5)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ScribTheme.primary.withValues(alpha: 0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.mic_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 10),
+                    Text('Start Recording',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15)),
+                  ],
+                ),
               ),
             ),
           ],

@@ -67,6 +67,7 @@ class _AuthScreenState extends State<AuthScreen>
   final _confirmFocus = FocusNode();
 
   _PasswordStrength _strength = _PasswordStrength.none;
+  String? _confirmError;
 
   @override
   void initState() {
@@ -88,7 +89,30 @@ class _AuthScreenState extends State<AuthScreen>
       final s = _getStrength(_passwordController.text);
       if (s != _strength) setState(() => _strength = s);
       if (_submitted) _formKey.currentState?.validate();
+      _checkConfirmMatch();
     });
+
+    _confirmController.addListener(_checkConfirmMatch);
+  }
+
+  void _checkConfirmMatch() {
+    if (!mounted || _isLogin) return;
+    final confirm = _confirmController.text;
+    final password = _passwordController.text;
+
+    if (confirm.isEmpty) {
+      if (_confirmError != null) setState(() => _confirmError = null);
+      return;
+    }
+    // No error while what's typed is still a valid prefix of the password
+    // (user is still typing along the correct path).
+    // Error fires immediately the moment the text diverges.
+    if (password.startsWith(confirm)) {
+      if (_confirmError != null) setState(() => _confirmError = null);
+      return;
+    }
+    const mismatch = 'Passwords do not match';
+    if (_confirmError != mismatch) setState(() => _confirmError = mismatch);
   }
 
   @override
@@ -357,8 +381,9 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   String? _validateConfirm(String? v) {
-    if (v == null || v.isEmpty) return 'Please confirm your password';
-    if (v != _passwordController.text) return 'Passwords do not match';
+    final val = v ?? '';
+    if (val.isEmpty) return 'Please confirm your password';
+    if (val != _passwordController.text) return 'Passwords do not match';
     return null;
   }
 
@@ -400,6 +425,7 @@ class _AuthScreenState extends State<AuthScreen>
                             hint: 'e.g. Rose Alice',
                             icon: Icons.person_outline_rounded,
                             textInputAction: TextInputAction.next,
+                            maxLength: 50,
                             onFieldSubmitted: (_) =>
                                 FocusScope.of(context).requestFocus(_emailFocus),
                             validator: _validateName,
@@ -416,6 +442,7 @@ class _AuthScreenState extends State<AuthScreen>
                           icon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
+                          maxLength: 100,
                           onFieldSubmitted: (_) =>
                               FocusScope.of(context).requestFocus(_passwordFocus),
                           validator: _validateEmail,
@@ -434,6 +461,7 @@ class _AuthScreenState extends State<AuthScreen>
                           textInputAction: _isLogin
                               ? TextInputAction.done
                               : TextInputAction.next,
+                          maxLength: 128,
                           onFieldSubmitted: (_) {
                             if (_isLogin) {
                               _submit();
@@ -473,6 +501,7 @@ class _AuthScreenState extends State<AuthScreen>
                             icon: Icons.lock_outline_rounded,
                             obscure: _obscureConfirm,
                             textInputAction: TextInputAction.done,
+                            maxLength: 128,
                             onFieldSubmitted: (_) => _submit(),
                             suffixIcon: IconButton(
                               icon: Icon(
@@ -487,6 +516,22 @@ class _AuthScreenState extends State<AuthScreen>
                             ),
                             validator: _validateConfirm,
                           ),
+                          // Real-time mismatch indicator
+                          if (_confirmError != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(Icons.error_outline_rounded,
+                                    color: ScribTheme.error, size: 13),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _confirmError!,
+                                  style: const TextStyle(
+                                      color: ScribTheme.error, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
 
                         // Forgot password (login only)
@@ -691,6 +736,7 @@ class _InputField extends StatelessWidget {
     this.textInputAction,
     this.onFieldSubmitted,
     this.validator,
+    this.maxLength,
   });
 
   final TextEditingController controller;
@@ -704,6 +750,7 @@ class _InputField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final void Function(String)? onFieldSubmitted;
   final String? Function(String?)? validator;
+  final int? maxLength;
 
   @override
   Widget build(BuildContext context) {
@@ -724,6 +771,7 @@ class _InputField extends StatelessWidget {
           textInputAction: textInputAction,
           onFieldSubmitted: onFieldSubmitted,
           validator: validator,
+          maxLength: maxLength,
           style: const TextStyle(color: ScribTheme.onSurface, fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
@@ -734,6 +782,7 @@ class _InputField extends StatelessWidget {
             suffixIcon: suffixIcon,
             filled: true,
             fillColor: ScribTheme.surface,
+            counterText: '',
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none),
