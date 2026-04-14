@@ -13,5 +13,16 @@ class SupabaseConfig {
 
   /// Deep-link scheme used for email confirmation & OAuth callbacks.
   static const String redirectScheme = 'com.example.scrib';
-  static const String redirectUrl = '$redirectScheme://login-callback/';
+  static const String appRedirectUrl = '$redirectScheme://login-callback/';
+
+  /// Browser redirect page shown after email verification/reset.
+  /// Override with --dart-define=SUPABASE_EMAIL_REDIRECT_URL=... when needed.
+  static const String browserRedirectUrl = String.fromEnvironment(
+    'SUPABASE_EMAIL_REDIRECT_URL',
+    defaultValue:
+        'https://joshuaagyemang08.github.io/Mobile_Dev_Group_Work/docs/verification-status.html',
+  );
+
+  /// Keep existing usage sites simple.
+  static const String redirectUrl = browserRedirectUrl;
 }

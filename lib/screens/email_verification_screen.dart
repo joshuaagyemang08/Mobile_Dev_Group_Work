@@ -8,7 +8,13 @@ import 'home_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
-  const EmailVerificationScreen({super.key, required this.email});
+  final String? pendingPassword;
+
+  const EmailVerificationScreen({
+    super.key,
+    required this.email,
+    this.pendingPassword,
+  });
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -66,6 +72,38 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       final user = Supabase.instance.client.auth.currentUser;
       if (user?.emailConfirmedAt != null) {
         _goHome();
+        return;
+      }
+
+      if (widget.pendingPassword != null && widget.pendingPassword!.isNotEmpty) {
+        try {
+          await Supabase.instance.client.auth.signInWithPassword(
+            email: widget.email,
+            password: widget.pendingPassword!,
+          );
+          if (mounted) {
+            _goHome();
+          }
+          return;
+        } on AuthException catch (e) {
+          final msg = e.message.toLowerCase();
+          if (msg.contains('email not confirmed') || msg.contains('email_not_confirmed')) {
+            if (mounted) {
+              _showSnack(
+                'Email not verified yet. Click the link in your inbox first.',
+                isError: true,
+              );
+            }
+            return;
+          }
+
+          if (mounted) {
+            _showSnack('Email looks verified. Please log in to continue.');
+            await Future.delayed(const Duration(milliseconds: 700));
+            _backToLogin();
+          }
+          return;
+        }
       } else {
         if (mounted) {
           _showSnack(
@@ -126,6 +164,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       ),
       (route) => false,
     );
+  }
+
+  void _backToLogin() {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _showSnack(String message, {bool isError = false}) {
@@ -209,7 +252,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                         ),
                       ),
                       const TextSpan(
-                          text: "\n\nClick the link to activate your account, then tap the button below."),
+                          text: "\n\nClick the link to activate your account. If the browser shows a blank page, return to the app and tap the button below."),
                     ],
                   ),
                 ),

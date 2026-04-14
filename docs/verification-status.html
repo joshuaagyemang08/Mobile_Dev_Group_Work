@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scrib Verification</title>
+    <style>
+      :root {
+        --bg: #0a1020;
+        --surface: #121a2f;
+        --text: #e9eefc;
+        --muted: #a8b3d7;
+        --ok: #00c896;
+        --warn: #ff6b6b;
+        --brand: #4c7dff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        background: radial-gradient(circle at 20% 10%, #1f2a4b 0%, var(--bg) 55%);
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+
+      .card {
+        width: min(560px, 100%);
+        background: linear-gradient(180deg, #17233f 0%, var(--surface) 100%);
+        border: 1px solid #26345d;
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .ok {
+        background: rgba(0, 200, 150, 0.15);
+        color: #7bffd6;
+        border: 1px solid rgba(0, 200, 150, 0.4);
+      }
+
+      .err {
+        background: rgba(255, 107, 107, 0.15);
+        color: #ffb4b4;
+        border: 1px solid rgba(255, 107, 107, 0.4);
+      }
+
+      h1 {
+        margin: 14px 0 10px;
+        font-size: clamp(24px, 4vw, 30px);
+        line-height: 1.2;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+        font-size: 15px;
+      }
+
+      .detail {
+        margin-top: 14px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        font-size: 13px;
+        color: #cad5f9;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .actions {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .btn {
+        border: none;
+        border-radius: 10px;
+        padding: 11px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      .primary {
+        background: var(--brand);
+        color: #fff;
+      }
+
+      .secondary {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid #324674;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div id="badge" class="badge ok">Success</div>
+      <h1 id="title">Email verified</h1>
+      <p id="message">Your email was verified successfully.</p>
+      <div id="detail" class="detail" style="display: none"></div>
+      <div class="actions">
+        <a class="btn primary" href="com.example.scrib://login-callback/">Open the app</a>
+        <button class="btn secondary" onclick="window.close()">Close page</button>
+      </div>
+    </main>
+
+    <script>
+      function parseParams() {
+        const query = new URLSearchParams(window.location.search);
+        const hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+        return { query, hash };
+      }
+
+      function get(params, key) {
+        return params.query.get(key) || params.hash.get(key);
+      }
+
+      const { query, hash } = parseParams();
+      const params = { query, hash };
+      const error = get(params, 'error') || get(params, 'error_code');
+      const errorDescription = get(params, 'error_description');
+      const type = get(params, 'type');
+
+      const badge = document.getElementById('badge');
+      const title = document.getElementById('title');
+      const message = document.getElementById('message');
+      const detail = document.getElementById('detail');
+
+      if (error) {
+        badge.className = 'badge err';
+        badge.textContent = 'Failed';
+        title.textContent = 'Verification failed';
+        message.textContent =
+          'This link is invalid or expired. Return to the app and tap Resend verification email.';
+
+        if (errorDescription) {
+          detail.style.display = 'block';
+          detail.textContent = errorDescription;
+        }
+      } else if (type === 'recovery') {
+        badge.className = 'badge ok';
+        badge.textContent = 'Password reset';
+        title.textContent = 'Reset link accepted';
+        message.textContent =
+          'Return to the app to continue your password reset flow.';
+      } else {
+        badge.className = 'badge ok';
+        badge.textContent = 'Verified';
+        title.textContent = 'Email verified successfully';
+        message.textContent =
+          'Go back to the app and tap "I\'ve verified my email" to continue.';
+      }
+    </script>
+  </body>
+</html>
