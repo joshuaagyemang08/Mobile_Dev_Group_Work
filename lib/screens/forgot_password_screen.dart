@@ -27,7 +27,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
 
-  final _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$');
+  final _emailRegex = RegExp(
+    r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
+  );
 
   @override
   void dispose() {

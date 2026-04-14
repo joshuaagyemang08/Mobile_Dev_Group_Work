@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/supabase_config.dart';
 import '../core/theme.dart';
-import 'home_screen.dart';
+import 'auth_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
@@ -36,85 +36,25 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (mounted && user?.emailConfirmedAt != null) {
-        _goHome();
-      }
-    });
-  }
-
-  // Listen for auth state changes — if the user clicks the link in the email
-  // the session updates and we auto-navigate.
-  late final _authSubscription =
-      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-    final session = data.session;
-    if (session != null &&
-        session.user.emailConfirmedAt != null &&
-        mounted) {
-      _goHome();
-    }
-  });
-
-  @override
   void dispose() {
     _fadeController.dispose();
-    _authSubscription.cancel();
     super.dispose();
   }
 
   Future<void> _checkVerification() async {
     setState(() => _isChecking = true);
     try {
-      await Supabase.instance.client.auth.refreshSession();
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user?.emailConfirmedAt != null) {
-        _goHome();
-        return;
-      }
-
-      if (widget.pendingPassword != null && widget.pendingPassword!.isNotEmpty) {
-        try {
-          await Supabase.instance.client.auth.signInWithPassword(
-            email: widget.email,
-            password: widget.pendingPassword!,
-          );
-          if (mounted) {
-            _goHome();
-          }
-          return;
-        } on AuthException catch (e) {
-          final msg = e.message.toLowerCase();
-          if (msg.contains('email not confirmed') || msg.contains('email_not_confirmed')) {
-            if (mounted) {
-              _showSnack(
-                'Email not verified yet. Click the link in your inbox first.',
-                isError: true,
-              );
-            }
-            return;
-          }
-
-          if (mounted) {
-            _showSnack('Email looks verified. Please log in to continue.');
-            await Future.delayed(const Duration(milliseconds: 700));
-            _backToLogin();
-          }
-          return;
-        }
-      } else {
-        if (mounted) {
-          _showSnack(
-            'Email not verified yet. Check your inbox and click the link.',
-            isError: true,
-          );
-        }
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (mounted) {
+        _showSnack('Continue by logging in with your email and password.');
+        await Future.delayed(const Duration(milliseconds: 700));
+        _backToLogin();
       }
     } catch (_) {
       if (mounted) {
-        _showSnack('Could not check status. Please try again.', isError: true);
+        _showSnack('Please return to login and sign in.', isError: true);
+        await Future.delayed(const Duration(milliseconds: 700));
+        _backToLogin();
       }
     } finally {
       if (mounted) setState(() => _isChecking = false);
@@ -153,22 +93,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     });
   }
 
-  void _goHome() {
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 500),
-        pageBuilder: (_, __, ___) => const HomeScreen(),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-      ),
-      (route) => false,
-    );
-  }
-
   void _backToLogin() {
     if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
+    );
   }
 
   void _showSnack(String message, {bool isError = false}) {

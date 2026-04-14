@@ -12,7 +12,9 @@ import 'email_verification_screen.dart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-final _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$');
+final _emailRegex = RegExp(
+  r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
+);
 
 enum _PasswordStrength { none, weak, fair, good, strong }
 
@@ -248,7 +250,10 @@ class _AuthScreenState extends State<AuthScreen>
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => EmailVerificationScreen(email: email),
+                builder: (_) => EmailVerificationScreen(
+                  email: email,
+                  pendingPassword: password,
+                ),
               ),
             );
           }
@@ -264,7 +269,10 @@ class _AuthScreenState extends State<AuthScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => EmailVerificationScreen(email: email),
+              builder: (_) => EmailVerificationScreen(
+                email: email,
+                pendingPassword: password,
+              ),
             ),
           );
         }
