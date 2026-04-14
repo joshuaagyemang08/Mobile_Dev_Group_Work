@@ -98,14 +98,21 @@ class _AuthScreenState extends State<AuthScreen>
   void _checkConfirmMatch() {
     if (!mounted || _isLogin) return;
     final confirm = _confirmController.text;
+    final password = _passwordController.text;
+
     if (confirm.isEmpty) {
       if (_confirmError != null) setState(() => _confirmError = null);
       return;
     }
-    final mismatch = confirm != _passwordController.text
-        ? 'Passwords do not match'
-        : null;
-    if (mismatch != _confirmError) setState(() => _confirmError = mismatch);
+    // No error while what's typed is still a valid prefix of the password
+    // (user is still typing along the correct path).
+    // Error fires immediately the moment the text diverges.
+    if (password.startsWith(confirm)) {
+      if (_confirmError != null) setState(() => _confirmError = null);
+      return;
+    }
+    const mismatch = 'Passwords do not match';
+    if (_confirmError != mismatch) setState(() => _confirmError = mismatch);
   }
 
   @override
@@ -206,12 +213,23 @@ class _AuthScreenState extends State<AuthScreen>
       } else {
         // ── Register flow ──
         final name = _nameController.text.trim();
-        await client.auth.signUp(
+        final response = await client.auth.signUp(
           email: email,
           password: password,
           data: {'name': name},
           emailRedirectTo: SupabaseConfig.redirectUrl,
         );
+
+        // Supabase may return a user with no identities when an account already
+        // exists (anti-enumeration behavior). Guide user to login instead.
+        final existingIdentities = response.user?.identities ?? const [];
+        if (response.user != null && existingIdentities.isEmpty) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showError('Account already exists. Please log in or reset your password.');
+          }
+          return;
+        }
 
         // Save name locally for greeting
         final prefs = await SharedPreferences.getInstance();
@@ -229,6 +247,20 @@ class _AuthScreenState extends State<AuthScreen>
         return;
       }
     } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (!_isLogin && msg.contains('over_email_send_rate_limit')) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showError('Too many requests. Wait a minute then tap Resend verification email.');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EmailVerificationScreen(email: email),
+            ),
+          );
+        }
+        return;
+      }
       if (mounted) {
         setState(() => _isLoading = false);
         _showError(e.message);
