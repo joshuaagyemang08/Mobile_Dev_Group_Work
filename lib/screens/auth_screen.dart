@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/email_guard.dart';
 import '../core/supabase_config.dart';
 import '../core/theme.dart';
 import 'home_screen.dart';
@@ -11,10 +12,6 @@ import 'forgot_password_screen.dart';
 import 'email_verification_screen.dart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-final _emailRegex = RegExp(
-  r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
-);
 
 enum _PasswordStrength { none, weak, fair, good, strong }
 
@@ -380,10 +377,7 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   String? _validateEmail(String? v) {
-    final val = v?.trim() ?? '';
-    if (val.isEmpty) return 'Email address is required';
-    if (!_emailRegex.hasMatch(val)) return 'Enter a valid email address';
-    return null;
+    return validateEmailForAuth(v);
   }
 
   String? _validatePassword(String? v) {
@@ -402,6 +396,18 @@ class _AuthScreenState extends State<AuthScreen>
     if (val.isEmpty) return 'Please confirm your password';
     if (val != _passwordController.text) return 'Passwords do not match';
     return null;
+  }
+
+  bool _isFormValid() {
+    final emailError = validateEmailForAuth(_emailController.text);
+    final passwordError = _validatePassword(_passwordController.text);
+    if (emailError != null || passwordError != null) return false;
+
+    if (_isLogin) return true;
+
+    final nameError = _validateName(_nameController.text);
+    final confirmError = _validateConfirm(_confirmController.text);
+    return nameError == null && confirmError == null;
   }
 
   @override
@@ -427,9 +433,7 @@ class _AuthScreenState extends State<AuthScreen>
                   position: _formSlide,
                   child: Form(
                     key: _formKey,
-                    autovalidateMode: _submitted
-                        ? AutovalidateMode.onUserInteraction
-                        : AutovalidateMode.disabled,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -579,6 +583,7 @@ class _AuthScreenState extends State<AuthScreen>
                         _SubmitButton(
                           label: _isLogin ? 'Login' : 'Create Account',
                           isLoading: _isLoading,
+                          isEnabled: !_isLoading && _isFormValid(),
                           onTap: _submit,
                         ),
 
@@ -876,10 +881,12 @@ class _SubmitButton extends StatelessWidget {
   const _SubmitButton({
     required this.label,
     required this.isLoading,
+    required this.isEnabled,
     required this.onTap,
   });
   final String label;
   final bool isLoading;
+  final bool isEnabled;
   final VoidCallback onTap;
 
   @override
@@ -890,20 +897,23 @@ class _SubmitButton extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          gradient: const LinearGradient(
-              colors: [ScribTheme.primary, Color(0xFF7B6FF0)]),
+          gradient: LinearGradient(
+              colors: isEnabled
+                  ? [ScribTheme.primary, const Color(0xFF7B6FF0)]
+                  : [ScribTheme.surfaceVariant, ScribTheme.surfaceVariant]),
           boxShadow: [
-            BoxShadow(
-                color: ScribTheme.primary.withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8))
+            if (isEnabled)
+              BoxShadow(
+                  color: ScribTheme.primary.withOpacity(0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8))
           ],
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: isLoading ? null : onTap,
+            onTap: isLoading || !isEnabled ? null : onTap,
             child: Center(
               child: isLoading
                   ? const SizedBox(

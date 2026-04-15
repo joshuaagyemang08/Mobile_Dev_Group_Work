@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/email_guard.dart';
 import '../core/supabase_config.dart';
 import '../core/theme.dart';
 
@@ -26,10 +27,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
-
-  final _emailRegex = RegExp(
-    r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$',
-  );
 
   @override
   void dispose() {
@@ -107,7 +104,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             child: _emailSent ? _SuccessView(email: _emailController.text.trim()) : _FormView(
               formKey: _formKey,
               emailController: _emailController,
-              emailRegex: _emailRegex,
               isLoading: _isLoading,
               onSubmit: _sendReset,
             ),
@@ -124,14 +120,12 @@ class _FormView extends StatelessWidget {
   const _FormView({
     required this.formKey,
     required this.emailController,
-    required this.emailRegex,
     required this.isLoading,
     required this.onSubmit,
   });
 
   final GlobalKey<FormState> formKey;
   final TextEditingController emailController;
-  final RegExp emailRegex;
   final bool isLoading;
   final VoidCallback onSubmit;
 
@@ -229,12 +223,7 @@ class _FormView extends StatelessWidget {
                       horizontal: 16, vertical: 14),
                 ),
                 validator: (v) {
-                  final val = v?.trim() ?? '';
-                  if (val.isEmpty) return 'Email address is required';
-                  if (!emailRegex.hasMatch(val)) {
-                    return 'Enter a valid email address';
-                  }
-                  return null;
+                  return validateEmailForAuth(v);
                 },
               ),
 

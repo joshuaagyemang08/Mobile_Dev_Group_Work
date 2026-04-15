@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme.dart';
-
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 

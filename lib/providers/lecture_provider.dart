@@ -7,12 +7,14 @@ import '../services/audio_service.dart';
 import '../services/transcription_service.dart';
 import '../services/ai_notes_service.dart';
 import '../services/notification_service.dart';
+import '../services/photo_storage_service.dart';
 import 'package:uuid/uuid.dart';
 
 class LectureProvider extends ChangeNotifier {
   final _audioService = AudioService();
   final _transcriptionService = TranscriptionService();
   final _aiNotesService = AiNotesService();
+  final _photoStorageService = PhotoStorageService();
   final _uuid = const Uuid();
 
   SupabaseClient get _db => Supabase.instance.client;
@@ -180,14 +182,33 @@ class LectureProvider extends ChangeNotifier {
   Future<void> addPhoto(String lectureId, String photoPath) async {
     final idx = _lectures.indexWhere((l) => l.id == lectureId);
     if (idx == -1) return;
+
+    String storedPath = photoPath;
+    try {
+      storedPath = await _photoStorageService.uploadLecturePhoto(
+        lectureId: lectureId,
+        localPath: photoPath,
+      );
+    } catch (e) {
+      // Fallback: keep a local file path so user can still attach/view photos.
+      debugPrint('Cloud photo upload failed, using local fallback: $e');
+    }
+
     final updated = List<String>.from(_lectures[idx].photoPaths)
-      ..add(photoPath);
+      ..add(storedPath);
     _updateLecture(_lectures[idx].copyWith(photoPaths: updated));
   }
 
   Future<void> deletePhoto(String lectureId, String photoPath) async {
     final idx = _lectures.indexWhere((l) => l.id == lectureId);
     if (idx == -1) return;
+
+    try {
+      await _photoStorageService.deleteByReference(photoPath);
+    } catch (e) {
+      debugPrint('Error deleting photo from storage: $e');
+    }
+
     final updated = List<String>.from(_lectures[idx].photoPaths)
       ..remove(photoPath);
     _updateLecture(_lectures[idx].copyWith(photoPaths: updated));

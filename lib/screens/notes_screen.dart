@@ -10,6 +10,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../core/theme.dart';
 import '../models/lecture.dart';
 import '../providers/lecture_provider.dart';
+import '../services/photo_storage_service.dart';
 
 class NotesScreen extends StatefulWidget {
   final Lecture lecture;
@@ -23,6 +24,7 @@ class _NotesScreenState extends State<NotesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
       TabController(length: 5, vsync: this);
+  final _photoStorage = PhotoStorageService();
 
   // ── Audio player state ────────────────────────────────────────────────────
   final _player = AudioPlayer();
@@ -72,7 +74,23 @@ class _NotesScreenState extends State<NotesScreen>
       imageQuality: 85,
     );
     if (picked != null && mounted) {
-      context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+      await context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+      if (!mounted) return;
+
+      // If not converted to sb:// ref, cloud upload failed and local fallback was used.
+      final lecture = context.read<LectureProvider>().lectures.firstWhere(
+            (l) => l.id == widget.lecture.id,
+            orElse: () => widget.lecture,
+          );
+      final latest = lecture.photoPaths.isNotEmpty ? lecture.photoPaths.last : '';
+      if (latest.isNotEmpty && !_photoStorage.isStorageReference(latest)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Photo saved on device only. Check Supabase bucket/policies for cloud upload.'),
+          ),
+        );
+      }
     }
   }
 
@@ -83,7 +101,22 @@ class _NotesScreenState extends State<NotesScreen>
       imageQuality: 85,
     );
     if (picked != null && mounted) {
-      context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+      await context.read<LectureProvider>().addPhoto(widget.lecture.id, picked.path);
+      if (!mounted) return;
+
+      final lecture = context.read<LectureProvider>().lectures.firstWhere(
+            (l) => l.id == widget.lecture.id,
+            orElse: () => widget.lecture,
+          );
+      final latest = lecture.photoPaths.isNotEmpty ? lecture.photoPaths.last : '';
+      if (latest.isNotEmpty && !_photoStorage.isStorageReference(latest)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Photo saved on device only. Check Supabase bucket/policies for cloud upload.'),
+          ),
+        );
+      }
     }
   }
 
@@ -1328,6 +1361,12 @@ class _PhotoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final photoStorage = PhotoStorageService();
+    final isStorageRef = photoStorage.isStorageReference(path);
+    final isNetwork =
+        isStorageRef || path.startsWith('http://') || path.startsWith('https://');
+    final resolvedUrl = isStorageRef ? photoStorage.toDisplayUrl(path) : path;
+
     return GestureDetector(
       onTap: onTap,
       child: Stack(
@@ -1335,15 +1374,25 @@ class _PhotoTile extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.file(
-              File(path),
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: ScribTheme.surface,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: ScribTheme.textSecondary),
-              ),
-            ),
+            child: isNetwork
+                ? Image.network(
+                    resolvedUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: ScribTheme.surface,
+                      child: const Icon(Icons.broken_image_outlined,
+                          color: ScribTheme.textSecondary),
+                    ),
+                  )
+                : Image.file(
+                    File(path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: ScribTheme.surface,
+                      child: const Icon(Icons.broken_image_outlined,
+                          color: ScribTheme.textSecondary),
+                    ),
+                  ),
           ),
           Positioned(
             top: 6,
@@ -1384,6 +1433,8 @@ class _PhotoViewScreenState extends State<_PhotoViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final photoStorage = PhotoStorageService();
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -1396,11 +1447,36 @@ class _PhotoViewScreenState extends State<_PhotoViewScreen> {
         controller: _pageController,
         itemCount: widget.photos.length,
         onPageChanged: (i) => setState(() => _current = i),
-        itemBuilder: (_, i) => InteractiveViewer(
-          child: Center(
-            child: Image.file(File(widget.photos[i])),
-          ),
-        ),
+        itemBuilder: (_, i) {
+          final photo = widget.photos[i];
+          final isStorageRef = photoStorage.isStorageReference(photo);
+          final isNetwork = isStorageRef ||
+              photo.startsWith('http://') ||
+              photo.startsWith('https://');
+          final url = isStorageRef ? photoStorage.toDisplayUrl(photo) : photo;
+
+          return InteractiveViewer(
+            child: Center(
+              child: isNetwork
+                  ? Image.network(
+                      url,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white70,
+                        size: 40,
+                      ),
+                    )
+                  : Image.file(
+                      File(photo),
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white70,
+                        size: 40,
+                      ),
+                    ),
+            ),
+          );
+        },
       ),
     );
   }

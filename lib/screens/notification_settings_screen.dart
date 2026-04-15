@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
+import '../services/notification_service.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -53,9 +54,25 @@ class _NotificationSettingsScreenState
             title: 'Lecture Ready',
             subtitle: 'Get notified when your AI notes are generated',
             value: _lectureReady,
-            onChanged: (val) {
+            onChanged: (val) async {
+              if (val) {
+                final granted = await NotificationService.requestPermission();
+                if (!granted) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Notification permission is off. Enable it in phone settings.'),
+                    ),
+                  );
+                  setState(() => _lectureReady = false);
+                  await _saveSetting('notify_lecture_ready', false);
+                  return;
+                }
+              }
+
               setState(() => _lectureReady = val);
-              _saveSetting('notify_lecture_ready', val);
+              await _saveSetting('notify_lecture_ready', val);
             },
           ),
           const SizedBox(height: 12),

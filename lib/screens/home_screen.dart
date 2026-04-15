@@ -70,8 +70,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: ScribTheme.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Consumer<LectureProvider>(
         builder: (context, provider, _) {
           final lectures = provider.lectures;
@@ -126,10 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         _searchQuery.isNotEmpty || _selectedSubject != null
                             ? '${filtered.length} result${filtered.length == 1 ? '' : 's'}'
                             : 'Your Lectures',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
-                          color: ScribTheme.onSurface,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                       if (_selectedSubject != null)
@@ -224,6 +225,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.fromLTRB(
           20, MediaQuery.of(context).padding.top + 24, 20, 20),
@@ -234,7 +236,7 @@ class _Header extends StatelessWidget {
           colors: [
             ScribTheme.primary.withValues(alpha: 0.18),
             ScribTheme.secondary.withValues(alpha: 0.04),
-            ScribTheme.background,
+            Theme.of(context).scaffoldBackgroundColor,
           ],
           stops: const [0.0, 0.5, 1.0],
         ),
@@ -277,18 +279,18 @@ class _Header extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   userName.isNotEmpty ? 'Hey, $userName!' : 'Welcome back!',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
-                    color: ScribTheme.onSurface,
+                    color: colorScheme.onSurface,
                     letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   DateFormat('EEEE, MMMM d').format(DateTime.now()),
-                  style: const TextStyle(
-                      fontSize: 13, color: ScribTheme.textSecondary),
+                  style: TextStyle(
+                      fontSize: 13, color: colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -346,12 +348,13 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: ScribTheme.surface,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: ScribTheme.surfaceVariant),
+        border: Border.all(color: colorScheme.surfaceContainerHighest),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
@@ -363,17 +366,17 @@ class _SearchBar extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: const TextStyle(color: ScribTheme.onSurface, fontSize: 14),
+        style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Search lectures or subjects...',
-          hintStyle:
-              const TextStyle(color: ScribTheme.textSecondary, fontSize: 14),
-          prefixIcon: const Icon(Icons.search_rounded,
-              color: ScribTheme.textSecondary, size: 20),
+          hintStyle: TextStyle(
+            color: colorScheme.onSurfaceVariant, fontSize: 14),
+          prefixIcon: Icon(Icons.search_rounded,
+            color: colorScheme.onSurfaceVariant, size: 20),
           suffixIcon: controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.close_rounded,
-                      color: ScribTheme.textSecondary, size: 18),
+              icon: Icon(Icons.close_rounded,
+                color: colorScheme.onSurfaceVariant, size: 18),
                   onPressed: () {
                     controller.clear();
                     onChanged('');
@@ -466,6 +469,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
@@ -474,7 +478,7 @@ class _StatCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              ScribTheme.surface,
+              colorScheme.surface,
               color.withValues(alpha: 0.06),
             ],
           ),
@@ -508,8 +512,9 @@ class _StatCard extends StatelessWidget {
                     letterSpacing: -0.5)),
             const SizedBox(height: 1),
             Text(sublabel,
-                style: const TextStyle(
-                    fontSize: 11, color: ScribTheme.textSecondary)),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
@@ -530,6 +535,7 @@ class _SubjectChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: 46,
       child: ListView.separated(
@@ -549,12 +555,12 @@ class _SubjectChips extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isSelected
                     ? ScribTheme.primary
-                    : ScribTheme.surface,
+                    : colorScheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected
                       ? ScribTheme.primary
-                      : ScribTheme.surfaceVariant,
+                      : colorScheme.surfaceContainerHighest,
                 ),
               ),
               child: Text(subject,
@@ -563,7 +569,7 @@ class _SubjectChips extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                       color: isSelected
                           ? Colors.white
-                          : ScribTheme.textSecondary)),
+                          : colorScheme.onSurfaceVariant)),
             ),
           );
         },
@@ -594,6 +600,7 @@ class _LectureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final color = _color;
     final isCompleted = lecture.status == LectureStatus.completed;
     final isFailed = lecture.status == LectureStatus.failed;
@@ -604,7 +611,7 @@ class _LectureCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: ScribTheme.surface,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -681,10 +688,10 @@ class _LectureCard extends StatelessWidget {
                                   children: [
                                     Text(
                                       lecture.title,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w600,
-                                        color: ScribTheme.onSurface,
+                                        color: colorScheme.onSurface,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -715,27 +722,27 @@ class _LectureCard extends StatelessWidget {
                                         ],
                                         Text(
                                           _formatDuration(lecture.duration),
-                                          style: const TextStyle(
-                                              fontSize: 12,
-                                              color:
-                                                  ScribTheme.textSecondary),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
                                         ),
-                                        const Padding(
+                                        Padding(
                                           padding: EdgeInsets.symmetric(
                                               horizontal: 5),
                                           child: Text('·',
                                               style: TextStyle(
-                                                  color: ScribTheme
-                                                      .textSecondary,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant,
                                                   fontSize: 12)),
                                         ),
                                         Text(
                                           DateFormat('MMM d')
                                               .format(lecture.recordedAt),
-                                          style: const TextStyle(
-                                              fontSize: 12,
-                                              color:
-                                                  ScribTheme.textSecondary),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -845,18 +852,19 @@ class _LectureCard extends StatelessWidget {
 
   void _showFailedDialog(BuildContext context, Lecture lecture) {
     final provider = context.read<LectureProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: ScribTheme.surface,
+        backgroundColor: colorScheme.surface,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Processing Failed',
-            style: TextStyle(color: ScribTheme.onSurface)),
+        title: Text('Processing Failed',
+            style: TextStyle(color: colorScheme.onSurface)),
         content: Text(
           lecture.errorMessage ?? 'Unknown error',
-          style: const TextStyle(
-              color: ScribTheme.textSecondary, fontSize: 13),
+          style: TextStyle(
+              color: colorScheme.onSurfaceVariant, fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -939,6 +947,7 @@ class _ProcessingBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final label = switch (lecture.status) {
       LectureStatus.uploading =>
         'Uploading ${(lecture.uploadProgress * 100).toStringAsFixed(0)}%',
@@ -962,8 +971,9 @@ class _ProcessingBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(label,
-                style: const TextStyle(
-                    fontSize: 12, color: ScribTheme.textSecondary)),
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant)),
             const Spacer(),
             const Text('Tap to view',
                 style: TextStyle(
@@ -977,7 +987,7 @@ class _ProcessingBar extends StatelessWidget {
             value: lecture.status == LectureStatus.uploading
                 ? lecture.uploadProgress
                 : null,
-            backgroundColor: ScribTheme.surfaceVariant,
+            backgroundColor: colorScheme.surfaceContainerHighest,
             color: ScribTheme.primary,
             minHeight: 3,
           ),
@@ -995,6 +1005,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 36),
@@ -1045,19 +1056,19 @@ class _EmptyState extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 28),
-            const Text('No lectures yet',
-                style: TextStyle(
+            Text('No lectures yet',
+              style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: ScribTheme.onSurface,
+                color: colorScheme.onSurface,
                     letterSpacing: -0.5)),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               'Record your first lecture and let Scrib turn it into smart study notes automatically.',
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 14,
-                  color: ScribTheme.textSecondary,
+                  color: colorScheme.onSurfaceVariant,
                   height: 1.6),
             ),
             const SizedBox(height: 36),
@@ -1109,22 +1120,24 @@ class _NoResultsState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.search_off_rounded,
-              size: 52, color: ScribTheme.textSecondary),
+        Icon(Icons.search_off_rounded,
+          size: 52, color: colorScheme.onSurfaceVariant),
           const SizedBox(height: 16),
-          const Text('Nothing found',
-              style: TextStyle(
+        Text('Nothing found',
+          style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: ScribTheme.onSurface)),
+            color: colorScheme.onSurface)),
           const SizedBox(height: 6),
           Text('No lectures match "$query"',
-              style: const TextStyle(
-                  fontSize: 13, color: ScribTheme.textSecondary)),
+          style: TextStyle(
+            fontSize: 13,
+            color: colorScheme.onSurfaceVariant)),
           const SizedBox(height: 20),
           TextButton(
             onPressed: onClear,
