@@ -11,7 +11,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
 import '../providers/theme_provider.dart';
 import 'auth_screen.dart';
+import 'about_screen.dart';
+import 'help_center_screen.dart';
 import 'notification_settings_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -287,16 +290,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildTile(
                   icon: Icons.help_outline_rounded,
                   title: 'Help Center',
-                  onTap: () {}),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const HelpCenterScreen()),
+                    )),
               _buildTile(
                   icon: Icons.privacy_tip_outlined,
                   title: 'Privacy Policy',
-                  onTap: () {}),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PrivacyPolicyScreen()),
+                    )),
               _buildTile(
                 icon: Icons.info_outline_rounded,
                 title: 'About Scrib',
                 subtitle: 'Version 1.0.0',
-                onTap: () {},
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AboutScreen()),
+                  ),
               ),
               const SizedBox(height: 32),
 
