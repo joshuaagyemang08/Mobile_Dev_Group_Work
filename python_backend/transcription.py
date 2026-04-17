@@ -53,7 +53,7 @@ class AssemblyAITranscriber:
             transcript = self.transcriber.transcribe(audio_file, config)
 
             if transcript.status == aai.TranscriptStatus.error:
-                print(f"❌ Transcription failed: {transcript.error}")
+                print(f"Transcription failed: {transcript.error}")
                 return "", "", []
 
             full_text = transcript.text
